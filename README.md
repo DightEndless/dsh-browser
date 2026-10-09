@@ -51,8 +51,9 @@ The paired Playwright / extension duration ratio was **1.24** (95% CI **1.16–1
 |---|---|---|
 | Read page | `browser_snapshot` | Structured text snapshot: title, URL, main text, numbered controls, and masked form fields; `delta: true` returns only changes |
 | Click element | `browser_click` | Click links, buttons, checkboxes, and other controls by inventory number |
-| Fill forms | `browser_type` | React/Vue-compatible input; `replace` clears the field first |
-| Press keys | `browser_press` | Keyboard events such as Enter, Tab, Escape, and arrow keys |
+| Fill forms | `browser_type` | React/Vue-compatible input; picks a `<select>` option by its label or value and toggles checkboxes/radios; `replace` clears the field first |
+| Upload a file | `browser_upload` | Attach a local file to a file input by path; the approval prompt names the file |
+| Press keys | `browser_press` | Enter, Tab, Escape, arrows etc. Tab moves focus and Enter/Space run the page's default action |
 | Scroll | `browser_scroll` | Viewport scrolling: up, down, top, and bottom |
 | Navigate | `browser_navigate` / `browser_open_tab` / `browser_back` / `browser_forward` / `browser_reload` | Navigation inside the controlled tab, or open a URL in a new tab and follow it (`active:false` keeps the current tab in front) |
 | List tabs | `browser_list_tabs` | List accessible tabs with stable IDs, titles, URLs, window/index metadata, and active/controlled state |
@@ -60,7 +61,8 @@ The paired Playwright / extension duration ratio was **1.24** (95% CI **1.16–1
 | Close tab | `browser_close_tab` | Close a tab returned by `browser_list_tabs` |
 | Read region | `browser_get_text` | Lazy-loaded or partial page text |
 | List images | `browser_images` | Absolute image URLs from the main content region, one per line, with dimensions, alt text, and lazy/placeholder flags; resolves `zoomfile`/`file`/`data-src` channels, and takes `selector`, `limit`, `allFrames` |
-| Wait for stability | `browser_wait` | Page-load and render-settle detection |
+| Capture the view | `browser_screenshot` | Save the visible area as a local image and return its path for `read_image`; use it for visual content (captcha, chart, layout) or images `browser_images` cannot reach |
+| Wait | `browser_wait` | Page settle detection, or wait for a `selector`/`text` to appear — or to disappear with `gone` — within `timeoutMs` |
 | Send images | `session.prompt` / `session.attachment` | Host-capability-gated image drafts, image-only prompts, and durable history previews |
 | Quote a selection | side panel composer | Text you highlight in the page appears in the composer and is sent with your next message as fenced, attributed page content |
 

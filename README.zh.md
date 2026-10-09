@@ -51,8 +51,9 @@ Playwright / 扩展的配对耗时比为 **1.24**（95% CI **1.16–1.34**）：
 |---|---|---|
 | 读取页面 | `browser_snapshot` | 结构化文本快照：标题/URL/正文/编号交互清单/表单字段（敏感值掩码）；`delta: true` 只返回变化 |
 | 点击元素 | `browser_click` | 按编号点击链接/按钮/复选框等 |
-| 填写表单 | `browser_type` | 输入文本（React/Vue 受控组件兼容），`replace` 清空重填 |
-| 按键 | `browser_press` | 键盘事件（Enter/Tab/Escape/方向键…） |
+| 填写表单 | `browser_type` | 输入文本（React/Vue 受控组件兼容）；按可见文字或 value 选下拉框；勾选/取消复选框与单选框；`replace` 清空重填 |
+| 上传文件 | `browser_upload` | 按路径把本地文件挂到文件输入框；审批框会显示文件路径 |
+| 按键 | `browser_press` | Enter/Tab/Escape/方向键等。Tab 真正移动焦点，Enter/空格真正触发页面默认行为 |
 | 滚动 | `browser_scroll` | 视口滚动（up/down/top/bottom） |
 | 页面导航 | `browser_navigate` / `browser_open_tab` / `browser_back` / `browser_forward` / `browser_reload` | 受控标签页内导航，或新开标签页并跟随（`active:false` 时保持当前页在前台） |
 | 列出标签页 | `browser_list_tabs` | 列出可访问标签页的稳定 ID、标题、URL、窗口/顺序以及活动/受控状态 |
@@ -60,7 +61,8 @@ Playwright / 扩展的配对耗时比为 **1.24**（95% CI **1.16–1.34**）：
 | 关闭标签页 | `browser_close_tab` | 关闭 `browser_list_tabs` 返回的标签页 |
 | 读取区域 | `browser_get_text` | 懒加载内容 / 局部文本 |
 | 列出图片 | `browser_images` | 正文区的绝对图片地址，每张一行，带宽高、alt 和懒加载/占位标记；会解析 `zoomfile`/`file`/`data-src` 通道，支持 `selector`、`limit`、`allFrames` |
-| 等待稳定 | `browser_wait` | 页面加载与渲染稳定检测 |
+| 截取画面 | `browser_screenshot` | 把可见区域存成本地图片并返回路径供 `read_image` 查看；页面含义靠视觉（验证码、图表、排版）或图片本身拿不到时用它 |
+| 等待 | `browser_wait` | 页面稳定检测；也可等 `selector`/`text` 出现，或配合 `gone` 等它消失，用 `timeoutMs` 限时 |
 | 发送图片 | `session.prompt` / `session.attachment` | 按宿主能力启用图片草稿、纯图片消息和持久历史预览 |
 | 引用选中内容 | 侧栏输入框 | 在页面里划选的文字会出现在输入框，随下一条消息一起发送，并带上来源与不可信内容边界 |
 

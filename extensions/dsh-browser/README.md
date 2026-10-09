@@ -12,8 +12,9 @@ The **browser-operation end** of dsh: the model reads and operates the browser p
 |---|---|---|
 | Read page | `browser_snapshot` | Title/URL/main text/numbered inventory/form fields (sensitive values masked); `delta: true` returns only changes |
 | Click element | `browser_click` | Click by inventory number (links/buttons/checkboxes…), React/Vue compatible |
-| Fill forms | `browser_type` | Type text; `replace` clears first |
-| Keys | `browser_press` | Enter/Tab/Escape/arrows etc. |
+| Fill forms | `browser_type` | Type text, pick a `<select>` option by its visible label or value, or check/uncheck a checkbox or radio; `replace` clears first. A drop-down that matches nothing reports its available options |
+| Upload a file | `browser_upload` | Attach a local file to a file input by path. The approval prompt names the file, and the result reports only its name and size |
+| Keys | `browser_press` | Enter/Tab/Escape/arrows etc. Tab moves focus and Enter/Space run the page's default action, unless the page handles the key itself |
 | Scroll | `browser_scroll` | Viewport scrolling (up/down/top/bottom) |
 | Navigate | `browser_navigate` / `browser_open_tab` / `browser_back` / `browser_forward` / `browser_reload` | Navigation inside the controlled tab, or open a URL in a new tab and follow it |
 | List tabs | `browser_list_tabs` | List accessible tabs with stable IDs, titles, URLs, and active/controlled state |
@@ -21,7 +22,8 @@ The **browser-operation end** of dsh: the model reads and operates the browser p
 | Close tab | `browser_close_tab` | Close a listed tab |
 | Read region | `browser_get_text` | Lazy-loaded content / partial text |
 | List images | `browser_images` | Absolute image URLs from the main content region, one per line, with dimensions, alt text, and lazy/placeholder flags; resolves `zoomfile`/`file`/`data-src`; takes `selector`, `limit`, `allFrames` |
-| Wait | `browser_wait` | Page load and render-settle detection |
+| Capture the view | `browser_screenshot` | Saves the visible area as a local image file and returns its path for `read_image`. Use it when the meaning is visual (captcha, chart, layout) or the picture itself is out of reach (inline `data:` URLs, CSS backgrounds, login-gated images) |
+| Wait | `browser_wait` | Page settle detection, or wait for a `selector`/`text` to appear — or to disappear with `gone` — within `timeoutMs` |
 | Chat with images | `session.prompt` / `session.attachment` | Host-gated image selection, image-only sends, and durable history previews |
 | Quote what you highlight | side panel composer | The text you select in the page becomes a quote in the composer and rides along with your next message |
 
@@ -127,7 +129,8 @@ Chrome uses `sidePanel`; Firefox uses `sidebar_action`. Both request `storage` (
 - Only one extension connection at a time. An unopened browser profile never claims it; if another open panel replaces a live connection, the replaced client yields instead of starting a reconnect fight.
 - Tab affinity is global to that extension connection rather than per chat session.
 - Accessible cross-origin iframes are snapshotted and operated with stable `(frame, index)` addresses. Restricted or short-lived frames are reported as unavailable without failing the whole page snapshot.
-- Captcha/image-only controls cannot be handled — the tool result reports "elements with no accessible name" and asks the user to complete that step manually.
+- Captcha and image-only controls are reported as "elements with no accessible name". `browser_screenshot` lets the model see them, but the user still has to solve them.
 - No automatic token rotation.
-- Synthetic `browser_press` events do not trigger browser-native default actions such as Tab focus movement, arrow-key scrolling, or Enter activation; use manual input when a workflow depends on those defaults.
-- `browser_wait` considers page load plus a fixed quiet window, but does not observe continuously changing DOM state; a live-updating SPA may be reported as stable.
+- Tool events are still synthetic, so they carry no user activation: APIs that demand a real gesture (file-picker dialogs, fullscreen, clipboard writes, `window.open`) cannot be triggered from a tool call.
+- `browser_press` now moves focus on Tab and runs the default action on Enter/Space, but other native affordances such as arrow-key scrolling are not reproduced.
+- `browser_wait` waits on a selector or text condition within `timeoutMs`, but does not watch arbitrary DOM mutations; a live-updating SPA may be reported as stable.

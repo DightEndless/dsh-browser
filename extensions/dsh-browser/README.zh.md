@@ -12,8 +12,9 @@ dsh 的**浏览器操作端**：让模型直接读取并操作你在浏览器里
 |---|---|---|
 | 读取页面 | `browser_snapshot` | 标题/URL/正文/编号交互清单/表单字段（敏感值掩码）；`delta: true` 只返回变化，省 token |
 | 点击元素 | `browser_click` | 按编号点击（链接/按钮/复选框…），React/Vue 组件兼容 |
-| 填写表单 | `browser_type` | 输入文本，`replace` 清空重填 |
-| 按键 | `browser_press` | Enter/Tab/Escape/方向键等 |
+| 填写表单 | `browser_type` | 输入文本；选下拉框（按可见文字或 value）；勾选/取消复选框与单选框；`replace` 清空重填。下拉框匹配不到时会列出所有可选项 |
+| 上传文件 | `browser_upload` | 按路径把本地文件挂到文件输入框。审批框会显示文件路径，结果只回报文件名与大小 |
+| 按键 | `browser_press` | Enter/Tab/Escape/方向键等。Tab 真正移动焦点，Enter/空格真正触发页面默认行为，除非页面自己处理了该按键 |
 | 滚动 | `browser_scroll` | 视口滚动（up/down/top/bottom） |
 | 导航 | `browser_navigate` / `browser_open_tab` / `browser_back` / `browser_forward` / `browser_reload` | 受控标签页内跳转，或新开标签页并跟随 |
 | 列出标签页 | `browser_list_tabs` | 列出可访问标签页的稳定 ID、标题、URL 和活动/受控状态 |
@@ -21,7 +22,8 @@ dsh 的**浏览器操作端**：让模型直接读取并操作你在浏览器里
 | 关闭标签页 | `browser_close_tab` | 关闭已列出的标签页 |
 | 读区域 | `browser_get_text` | 懒加载内容 / 局部文本 |
 | 列出图片 | `browser_images` | 正文区的绝对图片地址，每张一行，带宽高、alt 和懒加载/占位标记；解析 `zoomfile`/`file`/`data-src`；支持 `selector`、`limit`、`allFrames` |
-| 等待 | `browser_wait` | 页面加载与渲染稳定检测 |
+| 截取画面 | `browser_screenshot` | 把可见区域存成本地图片并返回路径，供 `read_image` 查看。页面含义靠视觉（验证码、图表、排版）或图片本身拿不到（内联 `data:`、CSS 背景、需登录）时用它 |
+| 等待 | `browser_wait` | 页面稳定检测；也可等 `selector`/`text` 出现，或配合 `gone` 等它消失，用 `timeoutMs` 限时 |
 | 图片对话 | `session.prompt` / `session.attachment` | 按宿主能力启用图片选择、纯图片发送和持久历史预览 |
 | 引用你划选的内容 | 侧栏输入框 | 你在页面里选中的文字会变成输入框里的引用，随下一条消息一起发送 |
 
@@ -127,7 +129,8 @@ Chrome 使用 `sidePanel`，Firefox 使用 `sidebar_action`。两者都申请 `s
 - 同时只有一个扩展连接桥。未打开侧栏的浏览器 Profile 不会抢占连接；另一个已打开的侧栏顶替连接后，被替换的一端会主动让权，不再反复重连互踢。
 - 标签页绑定属于整个扩展连接，而不是单个对话会话。
 - 可访问的跨源 iframe 会进入快照，并通过稳定的 `(frame, index)` 地址执行操作；受保护或已销毁的 frame 会标记为不可访问，不影响整页快照。
-- 验证码/纯图片按钮无法处理——工具结果会标注"存在无文本可访问名的元素"，提示用户手动完成该步。
+- 验证码/纯图片按钮会标注"存在无文本可访问名的元素"；`browser_screenshot` 能让模型看见它们，但仍需用户自己作答。
 - 令牌无自动轮换。
-- `browser_press` 的合成按键不触发浏览器原生默认行为（Tab 焦点移动、方向键、Enter 激活等），仅用于框架内的键盘事件；依赖原生行为的场景请手动操作。
-- `browser_wait` 以加载完成 + 固定静默窗口为准，不观察持续 DOM 更新（连续刷新的 SPA 可能被报为稳定）。
+- 工具产生的事件仍是合成事件，不带 user activation：需要真实手势的 API（文件选择框、全屏、写剪贴板、`window.open`）无法由工具调用触发。
+- `browser_press` 现在会让 Tab 移动焦点、Enter/空格触发默认行为，但方向键滚动等其它原生行为仍未复现。
+- `browser_wait` 支持按选择器/文本条件等待并限时，但不观察任意 DOM 变化（连续刷新的 SPA 仍可能被报为稳定）。
