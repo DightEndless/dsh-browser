@@ -67,7 +67,7 @@ Each `respond` carries a globally unique transport id as well as the host intera
 | Tool | Purpose |
 |---|---|
 | `browser_snapshot` | Structured text snapshot (title/URL/main/inventory/forms); `delta: true` returns only changes. |
-| `browser_click` / `browser_type` / `browser_press` / `browser_upload` / `browser_eval` | Operate inventory items by stable index: drop-down and toggle typing, real key defaults, attaching a local file, and evaluating an expression through the DevTools protocol. |
+| `browser_click` / `browser_click_at` / `browser_type` / `browser_press` / `browser_upload` / `browser_eval` | Operate inventory items by stable index, or click a viewport point with trusted input: drop-down and toggle typing, real key defaults, attaching a local file, and evaluating an expression through the DevTools protocol. |
 | `browser_scroll` / `browser_navigate` / `browser_open_tab` / `browser_back` / `browser_forward` / `browser_reload` | Page movement. |
 | `browser_get_text` / `browser_images` / `browser_screenshot` / `browser_wait` | Read regions / image addresses / a saved view / settle and condition waits. |
 

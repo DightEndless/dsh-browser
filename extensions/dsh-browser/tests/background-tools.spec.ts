@@ -62,8 +62,10 @@ function mockChrome(options: {
     if (response instanceof Error) throw response
     return response
   })
+  // Content-script injection ignores the result; point clicks read the viewport
+  // size out of it, so the stub answers with a fixed viewport.
   const executeScript = options.injectionError === undefined
-    ? vi.fn(async () => [{ frameId: 0, result: undefined }])
+    ? vi.fn(async () => [{ frameId: 0, result: { width: 800, height: 600 } }])
     : vi.fn(async () => { throw options.injectionError })
   const allTabs = () => options.tabs ?? (options.tab === undefined ? [] : [options.tab as chrome.tabs.Tab])
   const query = vi.fn(async (queryInfo?: chrome.tabs.QueryInfo) => Object.keys(queryInfo ?? {}).length === 0
@@ -481,6 +483,40 @@ describe('dispatchToolCall', () => {
     )
 
     expect(answer).toMatchObject({ ok: false, error: { message: expect.stringContaining('debugger') } })
+    expect(chromeMock.debuggerAttach).not.toHaveBeenCalled()
+  })
+
+  it('clicks a viewport point with trusted input and detaches', async () => {
+    const chromeMock = mockChrome({ tab: { id: 7, url: 'https://example.com' } })
+
+    const answer = await dispatchToolCall(
+      { ...CALL, name: 'browser_click_at', args: { x: 0.5, y: 0.25 } },
+      'auto',
+      undefined,
+      async () => 'approved' as const,
+    )
+
+    // The stub reports an 800x600 viewport: half across, a quarter down.
+    expect(answer).toMatchObject({ ok: true, result: { text: expect.stringContaining('(400, 150') } })
+    expect(chromeMock.debuggerSendCommand).toHaveBeenCalledWith(
+      { tabId: 7 },
+      'Input.dispatchMouseEvent',
+      expect.objectContaining({ type: 'mousePressed', x: 400, y: 150 }),
+    )
+    expect(chromeMock.debuggerDetach).toHaveBeenCalledTimes(1)
+  })
+
+  it('rejects a point outside the viewport instead of clicking', async () => {
+    const chromeMock = mockChrome({ tab: { id: 7, url: 'https://example.com' } })
+
+    const answer = await dispatchToolCall(
+      { ...CALL, name: 'browser_click_at', args: { x: 1.5, y: 0.5 } },
+      'auto',
+      undefined,
+      async () => 'approved' as const,
+    )
+
+    expect(answer).toMatchObject({ ok: false, error: { message: expect.stringContaining('between 0 and 1') } })
     expect(chromeMock.debuggerAttach).not.toHaveBeenCalled()
   })
 

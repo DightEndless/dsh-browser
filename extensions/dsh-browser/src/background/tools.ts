@@ -386,18 +386,18 @@ function renderRemoteValue(remote: RemoteValue | undefined): string {
 }
 
 /**
- * Evaluate one expression in the page through the DevTools protocol.
+ * Run one DevTools-protocol task against a tab, attaching first and always
+ * detaching afterwards.
  *
- * MV3 forbids `eval` for extension code, so the page's own script engine is the
- * only place an expression can run at all. That needs the `debugger` permission,
- * which puts a browser-level "being controlled" banner on screen while it is
- * attached — so this attaches, evaluates, and detaches again on every call
- * instead of holding a session open.
+ * MV3 forbids `eval` for extension code and gives no way to synthesise trusted
+ * input, so the debugger is the only route to either. Attaching is what raises
+ * the browser's "being controlled" banner, which is why a session is never held
+ * open between calls — detaching in `finally` is what takes the banner back down.
  */
-async function dispatchEval(tabId: number, call: ToolCall, signal?: AbortSignal): Promise<ToolAnswer> {
-  if (isCancelled(call, signal)) return cancelled()
-  const expression = typeof call.args.expression === 'string' ? call.args.expression : ''
-  if (expression.trim() === '') return unavailable('browser_eval needs a non-empty expression.')
+async function runWithDebugger(
+  tabId: number,
+  run: (target: chrome.debugger.Debuggee) => Promise<ToolAnswer>,
+): Promise<ToolAnswer> {
   let granted = false
   try {
     granted = await chrome.permissions.contains({ permissions: ['debugger'] })
@@ -405,7 +405,7 @@ async function dispatchEval(tabId: number, call: ToolCall, signal?: AbortSignal)
     granted = false
   }
   if (!granted) {
-    return unavailable('Script execution needs the "debugger" permission, which this extension was not granted.')
+    return unavailable('This needs the "debugger" permission, which this extension was not granted.')
   }
   const target = { tabId }
   try {
@@ -415,35 +415,108 @@ async function dispatchEval(tabId: number, call: ToolCall, signal?: AbortSignal)
     return unavailable(`Could not attach the debugger: ${detail}. DevTools open on this tab will block it.`)
   }
   try {
-    if (isCancelled(call, signal)) return cancelled()
-    const answer = await chrome.debugger.sendCommand(target, 'Runtime.evaluate', {
-      expression,
-      returnByValue: true,
-      awaitPromise: true,
-      timeout: EVAL_TIMEOUT_MS,
-    }) as {
-      result?: RemoteValue
-      exceptionDetails?: { text?: string; exception?: { description?: string } }
-    }
-    if (answer.exceptionDetails !== undefined) {
-      const detail = answer.exceptionDetails.exception?.description
-        ?? answer.exceptionDetails.text
-        ?? 'the expression threw'
-      return { ok: false, error: { code: 'action-failed', message: `The expression threw: ${detail}` } }
-    }
-    return { ok: true, result: { text: `Expression result:\n${renderRemoteValue(answer.result)}` } }
-  } catch (error: unknown) {
-    const detail = error instanceof Error ? error.message : String(error)
-    return unavailable(`The expression could not be evaluated: ${detail}`)
+    return await run(target)
   } finally {
-    // Detaching is what removes the browser's "being controlled" banner, so it
-    // has to happen even when the evaluation failed.
     try {
       await chrome.debugger.detach(target)
     } catch {
       // Already detached; nothing left to release.
     }
   }
+}
+
+/** Evaluate one expression in the page and render whatever comes back. */
+async function dispatchEval(tabId: number, call: ToolCall, signal?: AbortSignal): Promise<ToolAnswer> {
+  if (isCancelled(call, signal)) return cancelled()
+  const expression = typeof call.args.expression === 'string' ? call.args.expression : ''
+  if (expression.trim() === '') return unavailable('browser_eval needs a non-empty expression.')
+  return await runWithDebugger(tabId, async (target) => {
+    if (isCancelled(call, signal)) return cancelled()
+    try {
+      const answer = await chrome.debugger.sendCommand(target, 'Runtime.evaluate', {
+        expression,
+        returnByValue: true,
+        awaitPromise: true,
+        timeout: EVAL_TIMEOUT_MS,
+      }) as {
+        result?: RemoteValue
+        exceptionDetails?: { text?: string; exception?: { description?: string } }
+      }
+      if (answer.exceptionDetails !== undefined) {
+        const detail = answer.exceptionDetails.exception?.description
+          ?? answer.exceptionDetails.text
+          ?? 'the expression threw'
+        return { ok: false, error: { code: 'action-failed', message: `The expression threw: ${detail}` } }
+      }
+      return { ok: true, result: { text: `Expression result:\n${renderRemoteValue(answer.result)}` } }
+    } catch (error: unknown) {
+      const detail = error instanceof Error ? error.message : String(error)
+      return unavailable(`The expression could not be evaluated: ${detail}`)
+    }
+  })
+}
+
+/**
+ * Click one viewport point with real mouse input.
+ *
+ * Event dispatch from the isolated world is not trusted input, so pages that gate
+ * on `isTrusted` — and any target that has no element to address, such as a spot
+ * inside an image — need the debugger instead. Callers give viewport fractions
+ * rather than pixels, because that is how a screenshot maps back onto the page
+ * regardless of device pixel ratio.
+ */
+async function dispatchClickAt(tabId: number, call: ToolCall, signal?: AbortSignal): Promise<ToolAnswer> {
+  if (isCancelled(call, signal)) return cancelled()
+  const x = typeof call.args.x === 'number' ? call.args.x : Number.NaN
+  const y = typeof call.args.y === 'number' ? call.args.y : Number.NaN
+  if (!Number.isFinite(x) || !Number.isFinite(y) || x < 0 || x > 1 || y < 0 || y > 1) {
+    return unavailable('x and y must be viewport fractions between 0 and 1, with (0, 0) at the top left.')
+  }
+  let measured: { width?: number; height?: number } | undefined
+  try {
+    const [injected] = await chrome.scripting.executeScript({
+      target: { tabId },
+      func: () => ({ width: window.innerWidth, height: window.innerHeight }),
+    })
+    measured = injected?.result as { width?: number; height?: number } | undefined
+  } catch {
+    measured = undefined
+  }
+  const width = measured?.width ?? 0
+  const height = measured?.height ?? 0
+  if (width <= 0 || height <= 0) {
+    return unavailable('Could not measure the viewport of this tab, so the point cannot be placed.')
+  }
+  const point = { x: Math.round(x * width), y: Math.round(y * height) }
+  return await runWithDebugger(tabId, async (target) => {
+    try {
+      await chrome.debugger.sendCommand(target, 'Input.dispatchMouseEvent', {
+        type: 'mousePressed',
+        x: point.x,
+        y: point.y,
+        button: 'left',
+        buttons: 1,
+        clickCount: 1,
+      })
+      await chrome.debugger.sendCommand(target, 'Input.dispatchMouseEvent', {
+        type: 'mouseReleased',
+        x: point.x,
+        y: point.y,
+        button: 'left',
+        buttons: 0,
+        clickCount: 1,
+      })
+    } catch (error: unknown) {
+      const detail = error instanceof Error ? error.message : String(error)
+      return unavailable(`The click could not be delivered: ${detail}`)
+    }
+    return {
+      ok: true,
+      result: {
+        text: `Clicked ${Math.round(x * 100)}% across and ${Math.round(y * 100)}% down the viewport (${point.x}, ${point.y} of ${width}×${height}).`,
+      },
+    }
+  })
 }
 
 function cancelled(): ToolAnswer {
@@ -1038,6 +1111,10 @@ async function dispatchToolCallUnlocked(
   // CSP and the content script entirely.
   if (call.name === 'browser_eval') {
     return await dispatchEval(tab.id, call, signal)
+  }
+  // A point click needs trusted input, which only the debugger can produce.
+  if (call.name === 'browser_click_at') {
+    return await dispatchClickAt(tab.id, call, signal)
   }
   if (!isInjectablePage(tab.url)) {
     return await dispatchTabNativeTool(tab.id, tab.url, tab.title, tab.windowId, call, effectiveBudget, signal, targetStillAllowed, tabManagement.commitAction)

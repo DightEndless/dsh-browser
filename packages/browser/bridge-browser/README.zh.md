@@ -67,7 +67,7 @@ npx @deepseek-ai/dsh@0.2.0-rc.2 web
 | 工具 | 用途 |
 |---|---|
 | `browser_snapshot` | 结构化文本快照（标题/URL/正文/清单/表单）；`delta: true` 只返回变化。 |
-| `browser_click` / `browser_type` / `browser_press` / `browser_upload` / `browser_eval` | 按稳定编号操作清单元素：输入文本、选下拉框、勾选控件、真实按键默认行为、上传本地文件，以及通过 DevTools 协议求值脚本。 |
+| `browser_click` / `browser_click_at` / `browser_type` / `browser_press` / `browser_upload` / `browser_eval` | 按稳定编号操作清单元素，或用受信任输入点击视口坐标：输入文本、选下拉框、勾选控件、真实按键默认行为、上传本地文件，以及通过 DevTools 协议求值脚本。 |
 | `browser_scroll` / `browser_navigate` / `browser_open_tab` / `browser_back` / `browser_forward` / `browser_reload` | 页面移动。 |
 | `browser_get_text` / `browser_images` / `browser_screenshot` / `browser_wait` | 读区域文本 / 图片地址 / 截屏存档 / 稳定与条件等待。 |
 

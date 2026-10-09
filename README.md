@@ -51,6 +51,7 @@ The paired Playwright / extension duration ratio was **1.24** (95% CI **1.16–1
 |---|---|---|
 | Read page | `browser_snapshot` | Structured text snapshot: title, URL, main text, numbered controls, and masked form fields; `delta: true` returns only changes |
 | Click element | `browser_click` | Click links, buttons, checkboxes, and other controls by inventory number |
+| Click a point | `browser_click_at` | Click a viewport position with trusted mouse input; `x`/`y` are fractions of the viewport |
 | Fill forms | `browser_type` | React/Vue-compatible input; picks a `<select>` option by its label or value and toggles checkboxes/radios; `replace` clears the field first |
 | Upload a file | `browser_upload` | Attach a local file to a file input by path; the approval prompt names the file |
 | Run script | `browser_eval` | Evaluate a JavaScript expression in the page through the DevTools protocol and return its value; needs the `debugger` permission |

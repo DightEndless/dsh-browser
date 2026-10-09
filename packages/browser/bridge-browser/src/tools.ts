@@ -62,6 +62,7 @@ export const BROWSER_TOOL_NAMES = [
   'browser_use',
   'browser_snapshot',
   'browser_click',
+  'browser_click_at',
   'browser_type',
   'browser_press',
   'browser_upload',
@@ -287,6 +288,18 @@ function defineTools(call: BrowserTargetCall, options: BrowserToolsOptions): Too
     timeoutMs: options.toolTimeoutMs,
     output: TEXT_OUTPUT,
     execute: (args, exec) => call(exec, 'browser_click', args as Record<string, unknown>),
+  })
+
+  const clickAt = (): ToolDefinition => defineTool({
+    name: 'browser_click_at',
+    description: withTargetHint('Click a point in the controlled tab as trusted mouse input, for targets with no inventory number such as a spot inside an image. x and y are fractions of the viewport (0-1), which is how a screenshot maps onto the page.'),
+    parameters: {
+      x: { type: 'number', required: true, description: 'Horizontal fraction of the viewport width.' },
+      y: { type: 'number', required: true, description: 'Vertical fraction of the viewport height.' },
+    },
+    timeoutMs: options.toolTimeoutMs,
+    output: TEXT_OUTPUT,
+    execute: (args, exec) => call(exec, 'browser_click_at', args as Record<string, unknown>),
   })
 
   const type = (): ToolDefinition => defineTool({
@@ -546,6 +559,7 @@ function defineTools(call: BrowserTargetCall, options: BrowserToolsOptions): Too
     use(),
     snapshot(),
     click(),
+    clickAt(),
     type(),
     press(),
     upload(),

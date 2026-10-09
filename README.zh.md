@@ -51,6 +51,7 @@ Playwright / 扩展的配对耗时比为 **1.24**（95% CI **1.16–1.34**）：
 |---|---|---|
 | 读取页面 | `browser_snapshot` | 结构化文本快照：标题/URL/正文/编号交互清单/表单字段（敏感值掩码）；`delta: true` 只返回变化 |
 | 点击元素 | `browser_click` | 按编号点击链接/按钮/复选框等 |
+| 按坐标点击 | `browser_click_at` | 用受信任的鼠标输入点击视口内的位置；`x`/`y` 为视口比例 |
 | 填写表单 | `browser_type` | 输入文本（React/Vue 受控组件兼容）；按可见文字或 value 选下拉框；勾选/取消复选框与单选框；`replace` 清空重填 |
 | 上传文件 | `browser_upload` | 按路径把本地文件挂到文件输入框；审批框会显示文件路径 |
 | 执行脚本 | `browser_eval` | 通过 DevTools 协议在页面里求值 JavaScript 并返回结果；需要 `debugger` 权限 |

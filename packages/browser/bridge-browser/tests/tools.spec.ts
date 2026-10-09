@@ -234,9 +234,10 @@ describe('registerBrowserTools', () => {
     const descriptionChars = registered.reduce((sum, { definition }) => sum + String(definition.description).length, 0)
     // Raised from 1500 when multi-browser routing added browser_use plus the
     // per-tool routing hint, and again as the tool set itself grew (screenshot,
-    // upload, condition arguments on wait). The budget still guards against
-    // bloat: it tracks how many tools there are, not the size of any one.
-    expect(descriptionChars).toBeLessThan(3_200)
+    // upload, eval, point clicks, condition arguments on wait). The budget still
+    // guards against bloat: it tracks how many tools there are, not the size of
+    // any one description.
+    expect(descriptionChars).toBeLessThan(3_600)
   })
 
   it('writes a returned screenshot to a file and hands the model its path', async () => {

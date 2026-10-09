@@ -12,6 +12,7 @@ The **browser-operation end** of dsh: the model reads and operates the browser p
 |---|---|---|
 | Read page | `browser_snapshot` | Title/URL/main text/numbered inventory/form fields (sensitive values masked); `delta: true` returns only changes |
 | Click element | `browser_click` | Click by inventory number (links/buttons/checkboxes…), React/Vue compatible |
+| Click a point | `browser_click_at` | Click a viewport position with trusted mouse input, for targets that have no inventory number (a spot inside an image). `x`/`y` are fractions of the viewport, which is how a screenshot maps onto the page |
 | Fill forms | `browser_type` | Type text, pick a `<select>` option by its visible label or value, or check/uncheck a checkbox or radio; `replace` clears first. A drop-down that matches nothing reports its available options |
 | Upload a file | `browser_upload` | Attach a local file to a file input by path. The approval prompt names the file, and the result reports only its name and size |
 | Run script | `browser_eval` | Evaluate a JavaScript expression in the page and return its value, through the DevTools protocol. Needs the `debugger` permission; every call is approved on its own and the expression is shown in full |

@@ -12,6 +12,7 @@ const STATE_CHANGING_ACTIONS = new Set([
   'browser_press',
   'browser_upload',
   'browser_eval',
+  'browser_click_at',
   'browser_navigate',
   'browser_open_tab',
   'browser_back',
@@ -156,6 +157,15 @@ function summarizeAction(call: ToolCall, locale: UiLocale): string {
       `Run this script in the page: ${safeInline(typeof call.args.expression === 'string' ? call.args.expression : '?')}`,
       `在页面中执行这段脚本：${safeInline(typeof call.args.expression === 'string' ? call.args.expression : '?')}`,
     )
+    case 'browser_click_at': {
+      const across = typeof call.args.x === 'number' ? Math.round(call.args.x * 100) : '?'
+      const down = typeof call.args.y === 'number' ? Math.round(call.args.y * 100) : '?'
+      return localized(
+        locale,
+        `Click inside the page at ${across}% across and ${down}% down`,
+        `在页面横向 ${across}%、纵向 ${down}% 处点击`,
+      )
+    }
     case 'browser_navigate': return localized(
       locale,
       `Navigate to ${displayUrl(typeof call.args.url === 'string' ? call.args.url : '', locale)}`,

@@ -33,6 +33,12 @@ versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   holding a session open. That needs the `debugger` permission and puts a
   browser-level "being controlled" banner on screen while a call runs. Every call
   is approved on its own and the expression is shown in full in that prompt.
+- **`browser_click_at`** clicks a viewport point with **trusted** mouse input over
+  the same protocol. Event dispatch from a content script is not trusted input,
+  so pages that check `isTrusted` ignore it, and a target with no element to
+  address — a spot inside an image — cannot be reached by inventory number at all.
+  Callers give `x`/`y` as viewport fractions, which is how a screenshot maps back
+  onto the page regardless of device pixel ratio.
 - **`browser_wait`** takes `selector`, `text`, `gone`, and `timeoutMs`, so a call
   can wait for a condition instead of a fixed delay, and reports a clear timeout
   rather than hanging.
