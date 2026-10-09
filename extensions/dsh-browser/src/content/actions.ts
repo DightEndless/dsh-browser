@@ -405,12 +405,59 @@ function typeIntoContentEditable(el: HTMLElement, text: string, replace: boolean
   host.dispatchEvent(new Event('input', { bubbles: true }))
 }
 
+/**
+ * Choose an option on a `<select>` the way a user would. The visible label wins
+ * first because that is what the snapshot shows, then the value, then a
+ * case-folded match on both.
+ */
+function selectOption(select: HTMLSelectElement, wanted: string): string {
+  const needle = wanted.trim()
+  const options = [...select.options]
+  const match = options.find((option) => (option.textContent ?? '').trim() === needle)
+    ?? options.find((option) => option.value === needle)
+    ?? options.find((option) => (option.textContent ?? '').trim().toLowerCase() === needle.toLowerCase())
+    ?? options.find((option) => option.value.toLowerCase() === needle.toLowerCase())
+  if (match === undefined) {
+    const available = options
+      .slice(0, 12)
+      .map((option) => (option.textContent ?? '').trim())
+      .filter((label) => label !== '')
+    throw new ActionError(
+      'action-failed',
+      `No option of the drop-down matches "${needle}". Available options: ${available.join(' | ')}${options.length > 12 ? ' | …' : ''}`,
+    )
+  }
+  select.value = match.value
+  select.dispatchEvent(new Event('input', { bubbles: true }))
+  select.dispatchEvent(new Event('change', { bubbles: true }))
+  return `Selected “${(match.textContent ?? '').trim() || match.value}” in the drop-down.`
+}
+
+/** Read a checkbox/radio intent from the text argument. */
+function parseToggle(text: string, kind: string): boolean {
+  const value = text.trim().toLowerCase()
+  if (['true', 'on', 'yes', 'y', '1', 'checked', 'check', '是', '勾选'].includes(value)) return true
+  if (['false', 'off', 'no', 'n', '0', 'unchecked', 'uncheck', '否', '取消'].includes(value)) return false
+  throw new ActionError('bad-args', `Use true or false to set a ${kind} (received "${text}").`)
+}
+
 async function typeAction(args: Record<string, unknown>, ctx: ActionContext): Promise<ActionResult> {
   const index = numberArg(args, 'index')
   const text = typeof args.text === 'string' ? args.text : ''
   if (text === '') throw new ActionError('bad-args', 'text must not be empty.')
   const replace = args.replace === true
   const el = elementOrThrow(ctx.ids, index)
+  if (el instanceof HTMLSelectElement) {
+    const note = selectOption(el, text)
+    await waitForPageSettled(TYPE_SETTLE)
+    return withPageDelta(note, ctx)
+  }
+  if (el instanceof HTMLInputElement && (el.type === 'checkbox' || el.type === 'radio')) {
+    const desired = parseToggle(text, el.type)
+    if (el.checked !== desired) el.click()
+    await waitForPageSettled(TYPE_SETTLE)
+    return withPageDelta(`Set the ${el.type} to ${desired ? 'checked' : 'unchecked'}.`, ctx)
+  }
   if (isEditable(el)) {
     typeIntoContentEditable(el, text, replace)
   } else if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) {
@@ -423,17 +470,96 @@ async function typeAction(args: Record<string, unknown>, ctx: ActionContext): Pr
   return withPageDelta(`Entered ${text.length} characters into [${index}].`, ctx)
 }
 
-async function pressAction(args: Record<string, unknown>, ctx: ActionContext): Promise<ActionResult> {
-  const key = typeof args.key === 'string' && args.key !== '' ? args.key : ''
-  if (key === '') throw new ActionError('bad-args', 'key must not be empty.')
-  const target = document.activeElement instanceof HTMLElement ? document.activeElement : document.body
-  target.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }))
-  target.dispatchEvent(new KeyboardEvent('keyup', { key, bubbles: true, cancelable: true }))
-  if (key === 'Enter' && target instanceof HTMLInputElement && target.form !== null) {
-    target.form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+/** Elements a real Tab press would step through. */
+const FOCUSABLE_SELECTOR = [
+  'a[href]',
+  'button:not([disabled])',
+  'input:not([disabled]):not([type="hidden"])',
+  'select:not([disabled])',
+  'textarea:not([disabled])',
+  'summary',
+  '[contenteditable="true"]',
+  '[tabindex]:not([tabindex="-1"])',
+].join(',')
+
+/**
+ * Focusable candidates in the order a real Tab press visits them: positive
+ * tabindex values first (ascending), then everything else in document order.
+ */
+function tabbableElements(): HTMLElement[] {
+  return [...document.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)]
+    .filter((element) => element.getClientRects().length > 0 || element === document.activeElement)
+    .map((element, index) => ({ element, index, tabIndex: element.tabIndex }))
+    .sort((a, b) => {
+      const aPositive = a.tabIndex > 0
+      const bPositive = b.tabIndex > 0
+      if (aPositive !== bPositive) return aPositive ? -1 : 1
+      if (aPositive && bPositive && a.tabIndex !== b.tabIndex) return a.tabIndex - b.tabIndex
+      return a.index - b.index
+    })
+    .map((entry) => entry.element)
+}
+
+/** Move focus the way a real Tab press would and describe the outcome. */
+function moveFocus(backwards: boolean): string {
+  const elements = tabbableElements()
+  if (elements.length === 0) return 'the page has no focusable element to move to'
+  const current = document.activeElement instanceof HTMLElement ? document.activeElement : undefined
+  const index = current === undefined ? -1 : elements.indexOf(current)
+  const next = index === -1
+    ? (backwards ? elements.length - 1 : 0)
+    : (index + (backwards ? -1 : 1) + elements.length) % elements.length
+  const element = elements[next]
+  if (element === undefined) return 'the page has no focusable element to move to'
+  element.focus()
+  const label = element.getAttribute('aria-label') ?? element.textContent?.trim().slice(0, 40) ?? ''
+  const described = label === '' ? '' : ` “${label}”`
+  return `focus moved to <${element.tagName.toLowerCase()}>${described}`
+}
+
+/**
+ * Perform the default action a real Enter press would trigger. Unlike a bare
+ * `submit` event, `requestSubmit` runs validation and actually submits.
+ */
+function activateFocused(target: HTMLElement): string {
+  if (target instanceof HTMLInputElement && (target.type === 'submit' || target.type === 'image')) {
+    target.click()
+    return 'activated the focused submit control'
   }
+  if (target instanceof HTMLButtonElement || target instanceof HTMLAnchorElement) {
+    target.click()
+    return 'activated the focused control'
+  }
+  const form = target instanceof HTMLFormElement ? target : target.closest('form')
+  if (form !== null) {
+    form.requestSubmit()
+    return 'submitted the surrounding form'
+  }
+  return 'the key had no default action here'
+}
+
+async function pressAction(args: Record<string, unknown>, ctx: ActionContext): Promise<ActionResult> {
+  const raw = typeof args.key === 'string' && args.key !== '' ? args.key : ''
+  if (raw === '') throw new ActionError('bad-args', 'key must not be empty.')
+  const shift = /^shift\+/i.test(raw)
+  const key = raw.replace(/^(?:shift|ctrl|alt|meta)\+/i, '')
+  const target = document.activeElement instanceof HTMLElement ? document.activeElement : document.body
+  const init: KeyboardEventInit = { key, bubbles: true, cancelable: true, shiftKey: shift }
+  const down = new KeyboardEvent('keydown', init)
+  target.dispatchEvent(down)
+  let note = 'the key had no default action here'
+  if (down.defaultPrevented) {
+    note = 'the page handled it'
+  } else if (key === 'Tab') {
+    note = moveFocus(shift)
+  } else if (key === 'Enter') {
+    note = activateFocused(target)
+  } else if (key === ' ' || key === 'Spacebar') {
+    note = activateFocused(target)
+  }
+  target.dispatchEvent(new KeyboardEvent('keyup', init))
   await waitForPageSettled(ACTION_SETTLE)
-  return withPageDelta(`Sent key "${key}".`, ctx)
+  return withPageDelta(`Sent key "${raw}"; ${note}.`, ctx)
 }
 
 async function scrollAction(args: Record<string, unknown>, ctx: ActionContext): Promise<ActionResult> {
@@ -520,11 +646,51 @@ function imagesAction(args: Record<string, unknown>): ActionResult {
   return { text: renderImageScan(scan) }
 }
 
+/** How often a condition wait re-checks the page. */
+const WAIT_POLL_MS = 250
+/** Condition-wait budget when the caller does not ask for one. */
+const DEFAULT_WAIT_TIMEOUT_MS = 15_000
+/** Longest condition wait allowed, kept well under the bridge's tool timeout. */
+const MAX_WAIT_TIMEOUT_MS = 60_000
+
 async function waitAction(args: Record<string, unknown>, ctx: ActionContext): Promise<ActionResult> {
   const ms = typeof args.ms === 'number' && args.ms > 0 ? args.ms : 0
+  const selector = typeof args.selector === 'string' && args.selector.trim() !== '' ? args.selector.trim() : undefined
+  const text = typeof args.text === 'string' && args.text !== '' ? args.text : undefined
+  const gone = args.gone === true
+  if (selector === undefined && text === undefined) {
+    await waitForPageSettled(EXPLICIT_WAIT_SETTLE)
+    if (ms > 0) await sleep(ms)
+    return withPageDelta(`The page is stable${ms > 0 ? ` after an additional ${ms}ms wait` : ''}.`, ctx)
+  }
+  const requested = typeof args.timeoutMs === 'number' && args.timeoutMs > 0 ? args.timeoutMs : DEFAULT_WAIT_TIMEOUT_MS
+  const timeoutMs = Math.min(MAX_WAIT_TIMEOUT_MS, Math.round(requested))
+  const described = selector === undefined ? `text “${text ?? ''}”` : `selector “${selector}”`
+  const satisfied = (): boolean => {
+    if (selector !== undefined) {
+      let matched: Element | null
+      try {
+        matched = document.querySelector(selector)
+      } catch {
+        throw new ActionError('bad-args', `selector is not a valid CSS selector: ${selector}`)
+      }
+      if (gone ? matched !== null : matched === null) return false
+    }
+    if (text !== undefined) {
+      const present = (document.body?.innerText ?? '').includes(text)
+      if (gone ? present : !present) return false
+    }
+    return true
+  }
+  const deadline = Date.now() + timeoutMs
+  while (!satisfied()) {
+    if (Date.now() >= deadline) {
+      throw new ActionError('action-failed', `Timed out after ${timeoutMs}ms waiting for ${described} to ${gone ? 'disappear' : 'appear'}.`)
+    }
+    await sleep(WAIT_POLL_MS)
+  }
   await waitForPageSettled(EXPLICIT_WAIT_SETTLE)
-  if (ms > 0) await sleep(ms)
-  return withPageDelta(`The page is stable${ms > 0 ? ` after an additional ${ms}ms wait` : ''}.`, ctx)
+  return withPageDelta(`Waited until ${described} ${gone ? 'disappeared' : 'appeared'}.`, ctx)
 }
 
 function numberArg(args: Record<string, unknown>, name: string): number {

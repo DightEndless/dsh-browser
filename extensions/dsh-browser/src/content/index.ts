@@ -15,7 +15,6 @@ import { runAction, ActionError } from './actions.ts'
 import { ElementIds } from './ids.ts'
 import { SelectionWatcher } from './selection.ts'
 import type { SnapshotBudget } from './snapshot.ts'
-// 培训视频的自动连播：只在 WebVPN 的视频学习页面上生效，其它页面立即返回。
 
 /** Negotiated snapshot budgets, patched in from the background via message. */
 let budget: SnapshotBudget = { maxItems: 60, maxForms: 30, maxChars: DEFAULT_SNAPSHOT_MAX_CHARS }

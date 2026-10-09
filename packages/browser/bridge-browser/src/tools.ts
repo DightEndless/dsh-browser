@@ -75,6 +75,7 @@ export const BROWSER_TOOL_NAMES = [
   'browser_reload',
   'browser_get_text',
   'browser_images',
+  'browser_screenshot',
   'browser_wait',
 ] as const
 
@@ -107,6 +108,8 @@ export function registerBrowserTools(
       ...(sessionId === undefined ? {} : { sessionId }),
       timeoutMs: options.toolTimeoutMs,
     })
+    const screenshot = extractScreenshot(result)
+    if (screenshot !== undefined) return await screenshotResult(result, screenshot, name)
     return normalizeTextResult(result, name)
   }
 
@@ -150,6 +153,60 @@ function normalizeTextResult(result: unknown, name: string): TextResult {
     return { text: (result as { text: string }).text }
   }
   return { text: `${name} returned no text: ${JSON.stringify(result)}` }
+}
+
+/**
+ * One captured page image carried alongside the extension's text answer.
+ *
+ * The bridge stays text-only on the wire: the extension ships pixels as base64
+ * inside the tool result and this module is the only place that turns them into
+ * a file. The model never receives the base64 — it receives a path it can open
+ * with `read_image`.
+ */
+interface ScreenshotPayload {
+  mime: string
+  base64: string
+}
+
+/** Subdirectory of the OS temp directory that receives captured screenshots. */
+const SCREENSHOT_DIR = 'dsh-browser-screenshots'
+
+/** Pull a screenshot payload out of an extension result, when one is present. */
+function extractScreenshot(result: unknown): ScreenshotPayload | undefined {
+  if (typeof result !== 'object' || result === null) return undefined
+  const raw = (result as { screenshot?: unknown }).screenshot
+  if (typeof raw !== 'object' || raw === null) return undefined
+  const { mime, base64 } = raw as { mime?: unknown; base64?: unknown }
+  if (typeof mime !== 'string' || typeof base64 !== 'string' || base64 === '') return undefined
+  return { mime, base64 }
+}
+
+/** Write the captured image to a temp file and report its path to the model. */
+async function screenshotResult(
+  result: unknown,
+  screenshot: ScreenshotPayload,
+  name: string,
+): Promise<TextResult> {
+  const base = normalizeTextResult(result, name).text
+  try {
+    const { mkdir, writeFile } = await import('node:fs/promises')
+    const { tmpdir } = await import('node:os')
+    const { join } = await import('node:path')
+    const directory = join(tmpdir(), SCREENSHOT_DIR)
+    await mkdir(directory, { recursive: true })
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-')
+    const suffix = screenshot.mime === 'image/png' ? 'png' : 'jpg'
+    const path = join(directory, `${stamp}-${Math.random().toString(36).slice(2, 8)}.${suffix}`)
+    const bytes = Buffer.from(screenshot.base64, 'base64')
+    await writeFile(path, bytes)
+    const kb = Math.max(1, Math.round(bytes.byteLength / 1024))
+    return {
+      text: `${base}\n\nThe image is saved as ${screenshot.mime} (${kb} KB): ${path}\nRead that path with read_image to actually see the page.`,
+    }
+  } catch (error: unknown) {
+    const detail = error instanceof Error ? error.message : String(error)
+    return { text: `${base}\n\nThe image was captured but could not be saved to disk: ${detail}` }
+  }
 }
 
 interface BrowserTargetCall {
@@ -352,19 +409,45 @@ function defineTools(call: BrowserTargetCall, options: BrowserToolsOptions): Too
     },
   })
 
+  const screenshot = (): ToolDefinition => defineTool({
+    name: 'browser_screenshot',
+    description: withTargetHint(`Capture the visible area of the controlled tab as an image and save it to a local file; read that path with read_image to see it. Use it for visual content (captcha, chart, layout) or for pictures browser_images cannot reach (inline data:, CSS backgrounds, login-gated). ${UNTRUSTED_CONTENT_WARNING}`),
+    parameters: {
+      format: { type: 'string', enum: ['jpeg', 'png'], description: 'Defaults to jpeg, which is much smaller.' },
+      quality: { type: 'number', description: 'JPEG quality 1-100. Defaults to 85.' },
+    },
+    timeoutMs: options.toolTimeoutMs,
+    output: TEXT_OUTPUT,
+    execute: (args, exec) => {
+      const a = args as { format?: 'jpeg' | 'png'; quality?: number }
+      return call(exec, 'browser_screenshot', {
+        ...a.format !== undefined ? { format: a.format } : {},
+        ...a.quality !== undefined ? { quality: a.quality } : {},
+      })
+    },
+  })
+
   const wait = (): ToolDefinition => defineTool({
     name: 'browser_wait',
-    description: withTargetHint('Wait for loading and DOM changes to settle, with an optional extra delay.'),
+    description: withTargetHint('Wait for the page to settle, and optionally for a selector or text to appear or disappear.'),
     parameters: {
       ms: { type: 'number', description: 'Additional milliseconds to wait. Omit to perform only the settle check.' },
+      selector: { type: 'string', description: 'Wait until this CSS selector matches an element.' },
+      text: { type: 'string', description: 'Wait until this text appears in the visible page.' },
+      gone: { type: 'boolean', description: 'With selector or text, wait for it to disappear instead.' },
+      timeoutMs: { type: 'number', description: 'Give up after this many ms. Defaults to 15000.' },
       frame: FRAME_PARAMETER,
     },
     timeoutMs: options.toolTimeoutMs,
     output: TEXT_OUTPUT,
     execute: (args, exec) => {
-      const a = args as { ms?: number; frame?: number }
+      const a = args as { ms?: number; selector?: string; text?: string; gone?: boolean; timeoutMs?: number; frame?: number }
       return call(exec, 'browser_wait', {
         ...a.ms !== undefined ? { ms: a.ms } : {},
+        ...a.selector !== undefined ? { selector: a.selector } : {},
+        ...a.text !== undefined ? { text: a.text } : {},
+        ...a.gone !== undefined ? { gone: a.gone } : {},
+        ...a.timeoutMs !== undefined ? { timeoutMs: a.timeoutMs } : {},
         ...a.frame !== undefined ? { frame: a.frame } : {},
       })
     },
@@ -401,6 +484,7 @@ function defineTools(call: BrowserTargetCall, options: BrowserToolsOptions): Too
     simple('browser_reload', 'Reload the current page.'),
     getText(),
     images(),
+    screenshot(),
     wait(),
   ]
 }

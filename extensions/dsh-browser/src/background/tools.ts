@@ -147,6 +147,37 @@ async function injectContentScript(tabId: number): Promise<void> {
   }
 }
 
+/** Lower bound for one content-script round trip, even when time is nearly up. */
+const ACTION_RESPONSE_FLOOR_MS = 5_000
+/** Ceiling for an ordinary action; tools that exist to wait get more room. */
+const ACTION_RESPONSE_CEILING_MS = 45_000
+/** Tools whose whole purpose is to wait, so they may hold the channel longer. */
+const LONG_WAIT_TOOL_NAMES = new Set(['browser_wait'])
+/** Keep enough of the server budget to still report a failure. */
+const ACTION_RESPONSE_RESERVE_MS = 2_000
+
+/** Raised when a content script accepted a message but never answered it. */
+class ContentScriptTimeoutError extends Error {
+  constructor(readonly waitedMs: number) {
+    super(`The content script did not answer within ${waitedMs}ms.`)
+    this.name = 'ContentScriptTimeoutError'
+  }
+}
+
+/**
+ * How long to wait for one content-script answer.
+ *
+ * A frozen or discarded tab leaves `sendMessage` pending forever, which used to
+ * surface as the bridge's full 90s timeout with no explanation. Bounding the
+ * wait turns that silence into a report the model can act on.
+ */
+function actionResponseBudget(call: ToolCall): number {
+  const ceiling = LONG_WAIT_TOOL_NAMES.has(call.name) ? ACTION_RESPONSE_CEILING_MS * 2 : ACTION_RESPONSE_CEILING_MS
+  if (call.expiresAt === undefined) return ceiling
+  const remaining = call.expiresAt - Date.now() - ACTION_RESPONSE_RESERVE_MS
+  return Math.max(ACTION_RESPONSE_FLOOR_MS, Math.min(remaining, ceiling))
+}
+
 async function sendAction(
   tabId: number,
   call: ToolCall,
@@ -154,13 +185,25 @@ async function sendAction(
   budget?: ContentBudget,
   includePageDelta: boolean = false,
 ): Promise<unknown> {
-  return chrome.tabs.sendMessage(tabId, {
-    type: 'DSH_ACTION',
-    action: call.name,
-    args: withoutFrame(call.args),
-    ...budget === undefined ? {} : { budget },
-    ...includePageDelta ? { includePageDelta: true } : {},
-  }, frame.documentId === undefined ? { frameId: frame.frameId } : { documentId: frame.documentId })
+  const timeoutMs = actionResponseBudget(call)
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const expiry = new Promise<never>((_resolve, reject) => {
+    timer = setTimeout(() => reject(new ContentScriptTimeoutError(timeoutMs)), timeoutMs)
+  })
+  try {
+    return await Promise.race([
+      chrome.tabs.sendMessage(tabId, {
+        type: 'DSH_ACTION',
+        action: call.name,
+        args: withoutFrame(call.args),
+        ...budget === undefined ? {} : { budget },
+        ...includePageDelta ? { includePageDelta: true } : {},
+      }, frame.documentId === undefined ? { frameId: frame.frameId } : { documentId: frame.documentId }),
+      expiry,
+    ])
+  } finally {
+    if (timer !== undefined) clearTimeout(timer)
+  }
 }
 
 function contentScriptReceiverMissing(error: unknown): boolean {
@@ -252,6 +295,55 @@ async function dispatchTabNativeTool(
   if (isCancelled(call, signal)) return cancelled()
   if (targetStillAllowed?.() === false) return targetChanged()
   return { ok: true, result: { text, navigationPending: true } }
+}
+
+/**
+ * Capture the visible area of one tab and hand the pixels back to the bridge.
+ *
+ * `captureVisibleTab` always photographs the active tab of a window, so a
+ * background target is brought to the front first — otherwise the model would
+ * receive a picture of whatever the user happened to be looking at instead.
+ */
+async function dispatchScreenshot(
+  tabId: number,
+  windowId: number | undefined,
+  call: ToolCall,
+  signal?: AbortSignal,
+): Promise<ToolAnswer> {
+  if (isCancelled(call, signal)) return cancelled()
+  const format = call.args.format === 'png' ? 'png' : 'jpeg'
+  const requestedQuality = typeof call.args.quality === 'number' ? call.args.quality : 85
+  const quality = Math.min(100, Math.max(1, Math.round(requestedQuality)))
+  try {
+    const tab = await chrome.tabs.get(tabId)
+    let activated = false
+    if (!tab.active) {
+      await chrome.tabs.update(tabId, { active: true })
+      activated = true
+      // Give the compositor one frame to present the newly activated tab.
+      await new Promise((resolve) => setTimeout(resolve, 120))
+    }
+    if (isCancelled(call, signal)) return cancelled()
+    const dataUrl = await chrome.tabs.captureVisibleTab(
+      windowId ?? tab.windowId,
+      format === 'png' ? { format: 'png' } : { format: 'jpeg', quality },
+    )
+    const match = /^data:([^;,]+);base64,(.*)$/s.exec(dataUrl)
+    if (match === null) return unavailable('The browser returned a screenshot in an unexpected format.')
+    const mime = match[1] ?? `image/${format}`
+    const base64 = match[2] ?? ''
+    if (base64 === '') return unavailable('The browser returned an empty screenshot.')
+    return {
+      ok: true,
+      result: {
+        text: `Captured the visible area of the controlled tab${activated ? ' (the tab was brought to the front first)' : ''} as ${mime}.`,
+        screenshot: { mime, base64 },
+      },
+    }
+  } catch (error: unknown) {
+    const detail = error instanceof Error ? error.message : String(error)
+    return unavailable(`The screenshot could not be taken: ${detail}`)
+  }
 }
 
 function cancelled(): ToolAnswer {
@@ -736,7 +828,7 @@ export async function dispatchToolCall(
   // Privacy boundary: with sharing off, no page content may leave the page.
   if (!tabManagement.unrestrictedAccess
     && sharePageContent === 'off'
-    && (call.name === 'browser_snapshot' || call.name === 'browser_get_text' || call.name === 'browser_images')) {
+    && (call.name === 'browser_snapshot' || call.name === 'browser_get_text' || call.name === 'browser_images' || call.name === 'browser_screenshot')) {
     return { ok: false, error: { code: 'action-failed', message: 'Page content sharing is disabled in Settings > Page content sharing.' } }
   }
   const tab = targetTab ?? (await chrome.tabs.query({ active: true, lastFocusedWindow: true }))[0]
@@ -780,6 +872,11 @@ export async function dispatchToolCall(
     const refreshedTargetError = validateElementTarget(call, tab.id, executionFrames)
     if (refreshedTargetError !== undefined) return refreshedTargetError
   }
+  // A screenshot is taken by the browser rather than by the page, so it never
+  // goes through the content script and also works on protected pages.
+  if (call.name === 'browser_screenshot') {
+    return await dispatchScreenshot(tab.id, tab.windowId, call, signal)
+  }
   if (!isInjectablePage(tab.url)) {
     return await dispatchTabNativeTool(tab.id, tab.url, tab.title, tab.windowId, call, effectiveBudget, signal, targetStillAllowed, tabManagement.commitAction)
       ?? unavailable('The current page DOM is protected by the browser.')
@@ -798,6 +895,9 @@ export async function dispatchToolCall(
     )
   } catch (error: unknown) {
     if (isCancelled(call, signal)) return cancelled()
+    if (error instanceof ContentScriptTimeoutError) {
+      return unavailable(`The page did not answer within ${error.waitedMs}ms, which usually means the tab was frozen or the page's own script is stuck. Reload the tab with browser_reload, then take a fresh snapshot.`)
+    }
     if (!contentScriptReceiverMissing(error)) {
       return unavailable('The content script stopped responding after the operation was dispatched. Call browser_snapshot before continuing.')
     }

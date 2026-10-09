@@ -5,7 +5,7 @@ import type { TabFrame } from './frames.ts'
 import type { ApprovalPrompt } from '../security/approval.ts'
 import { getUiLocale, type UiLocale } from '../i18n.ts'
 
-const PAGE_READS = new Set(['browser_snapshot', 'browser_get_text', 'browser_images'])
+const PAGE_READS = new Set(['browser_snapshot', 'browser_get_text', 'browser_images', 'browser_screenshot'])
 const STATE_CHANGING_ACTIONS = new Set([
   'browser_click',
   'browser_type',
@@ -113,6 +113,9 @@ function readSummary(name: string, locale: UiLocale): string {
   }
   if (name === 'browser_images') {
     return localized(locale, 'Read image addresses from the current page', '读取当前页面的图片地址')
+  }
+  if (name === 'browser_screenshot') {
+    return localized(locale, 'Capture the visible area of the current page as an image', '截取当前页面的可见区域为图片')
   }
   return localized(locale, 'Read the current page and accessible iframes', '读取当前页面及可访问 iframe')
 }
