@@ -11,6 +11,7 @@ const STATE_CHANGING_ACTIONS = new Set([
   'browser_type',
   'browser_press',
   'browser_upload',
+  'browser_eval',
   'browser_navigate',
   'browser_open_tab',
   'browser_back',
@@ -147,6 +148,13 @@ function summarizeAction(call: ToolCall, locale: UiLocale): string {
       locale,
       `Attach the local file “${safeInline(typeof call.args.path === 'string' ? call.args.path : '?')}” to the page${frame}`,
       `把本地文件「${safeInline(typeof call.args.path === 'string' ? call.args.path : '?')}」上传到页面${frame}`,
+    )
+    // The expression is shown in full on purpose: this is the one tool that can
+    // run arbitrary code in the page, so the user must see exactly what will run.
+    case 'browser_eval': return localized(
+      locale,
+      `Run this script in the page: ${safeInline(typeof call.args.expression === 'string' ? call.args.expression : '?')}`,
+      `在页面中执行这段脚本：${safeInline(typeof call.args.expression === 'string' ? call.args.expression : '?')}`,
     )
     case 'browser_navigate': return localized(
       locale,

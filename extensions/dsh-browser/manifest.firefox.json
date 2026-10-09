@@ -25,7 +25,8 @@
     "scripting",
     "webNavigation",
     "alarms",
-    "notifications"
+    "notifications",
+    "debugger"
   ],
   "host_permissions": [
     "http://*/*",

@@ -65,6 +65,7 @@ export const BROWSER_TOOL_NAMES = [
   'browser_type',
   'browser_press',
   'browser_upload',
+  'browser_eval',
   'browser_scroll',
   'browser_navigate',
   'browser_open_tab',
@@ -348,6 +349,17 @@ function defineTools(call: BrowserTargetCall, options: BrowserToolsOptions): Too
     },
   })
 
+  const evaluate = (): ToolDefinition => defineTool({
+    name: 'browser_eval',
+    description: withTargetHint(`Run a JavaScript expression in the controlled tab and return its value. Use it to read state a snapshot does not expose or to drive a control no event reaches; an async IIFE handles multi-step work. ${UNTRUSTED_CONTENT_WARNING}`),
+    parameters: {
+      expression: { type: 'string', required: true, description: 'JavaScript expression or async IIFE to evaluate in the page.' },
+    },
+    timeoutMs: options.toolTimeoutMs,
+    output: TEXT_OUTPUT,
+    execute: (args, exec) => call(exec, 'browser_eval', args as Record<string, unknown>),
+  })
+
   const scroll = (): ToolDefinition => defineTool({
     name: 'browser_scroll',
     description: withTargetHint('Scroll up, down, top, or bottom; amount is optional pixels.'),
@@ -537,6 +549,7 @@ function defineTools(call: BrowserTargetCall, options: BrowserToolsOptions): Too
     type(),
     press(),
     upload(),
+    evaluate(),
     scroll(),
     navigate(),
     openTab(),

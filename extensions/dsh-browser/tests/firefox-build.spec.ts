@@ -34,6 +34,16 @@ describe('Firefox build contract', () => {
     expect(firefoxManifest.content_security_policy.extension_pages).toContain('https://raw.githubusercontent.com')
   })
 
+  it('declares the debugger permission that browser_eval needs', async () => {
+    const [chromeManifest, firefoxManifest] = await Promise.all([
+      readJson<ExtensionManifest>('../manifest.json'),
+      readJson<ExtensionManifest>('../manifest.firefox.json'),
+    ])
+
+    expect(chromeManifest.permissions).toContain('debugger')
+    expect(firefoxManifest.permissions).toContain('debugger')
+  })
+
   it('ships the main-world companion that javascript: links need', async () => {
     const manifest = await readJson<{ content_scripts?: Array<{ js?: string[]; run_at?: string; world?: string }> }>('../manifest.firefox.json')
 

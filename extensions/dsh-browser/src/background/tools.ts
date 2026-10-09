@@ -98,6 +98,9 @@ const PAGE_CONTENT_TOOL_NAMES = new Set([
   'browser_get_text',
   'browser_images',
   'browser_screenshot',
+  // An evaluated expression can read anything the page can, so it belongs
+  // behind the same switch.
+  'browser_eval',
 ])
 const NAVIGATION_SNAPSHOT_GUIDANCE = 'Navigation completed and the current page snapshot is included below. Use it directly instead of taking an immediate duplicate snapshot.'
 const pendingInjections = new Map<number, Promise<void>>()
@@ -355,6 +358,91 @@ async function dispatchScreenshot(
   } catch (error: unknown) {
     const detail = error instanceof Error ? error.message : String(error)
     return unavailable(`The screenshot could not be taken: ${detail}`)
+  }
+}
+
+/** How long one expression may run before the debugger gives up on it. */
+const EVAL_TIMEOUT_MS = 10_000
+
+/** One value the debugger sent back for an evaluated expression. */
+interface RemoteValue {
+  type?: string
+  value?: unknown
+  description?: string
+}
+
+/** Render a debugger value roughly the way a console would, favouring JSON. */
+function renderRemoteValue(remote: RemoteValue | undefined): string {
+  if (remote === undefined) return '(no value)'
+  if (remote.type === 'undefined') return 'undefined'
+  if (remote.value !== undefined) {
+    try {
+      return JSON.stringify(remote.value, null, 2) ?? String(remote.value)
+    } catch {
+      return String(remote.value)
+    }
+  }
+  return remote.description ?? `(${remote.type ?? 'value'})`
+}
+
+/**
+ * Evaluate one expression in the page through the DevTools protocol.
+ *
+ * MV3 forbids `eval` for extension code, so the page's own script engine is the
+ * only place an expression can run at all. That needs the `debugger` permission,
+ * which puts a browser-level "being controlled" banner on screen while it is
+ * attached — so this attaches, evaluates, and detaches again on every call
+ * instead of holding a session open.
+ */
+async function dispatchEval(tabId: number, call: ToolCall, signal?: AbortSignal): Promise<ToolAnswer> {
+  if (isCancelled(call, signal)) return cancelled()
+  const expression = typeof call.args.expression === 'string' ? call.args.expression : ''
+  if (expression.trim() === '') return unavailable('browser_eval needs a non-empty expression.')
+  let granted = false
+  try {
+    granted = await chrome.permissions.contains({ permissions: ['debugger'] })
+  } catch {
+    granted = false
+  }
+  if (!granted) {
+    return unavailable('Script execution needs the "debugger" permission, which this extension was not granted.')
+  }
+  const target = { tabId }
+  try {
+    await chrome.debugger.attach(target, '1.3')
+  } catch (error: unknown) {
+    const detail = error instanceof Error ? error.message : String(error)
+    return unavailable(`Could not attach the debugger: ${detail}. DevTools open on this tab will block it.`)
+  }
+  try {
+    if (isCancelled(call, signal)) return cancelled()
+    const answer = await chrome.debugger.sendCommand(target, 'Runtime.evaluate', {
+      expression,
+      returnByValue: true,
+      awaitPromise: true,
+      timeout: EVAL_TIMEOUT_MS,
+    }) as {
+      result?: RemoteValue
+      exceptionDetails?: { text?: string; exception?: { description?: string } }
+    }
+    if (answer.exceptionDetails !== undefined) {
+      const detail = answer.exceptionDetails.exception?.description
+        ?? answer.exceptionDetails.text
+        ?? 'the expression threw'
+      return { ok: false, error: { code: 'action-failed', message: `The expression threw: ${detail}` } }
+    }
+    return { ok: true, result: { text: `Expression result:\n${renderRemoteValue(answer.result)}` } }
+  } catch (error: unknown) {
+    const detail = error instanceof Error ? error.message : String(error)
+    return unavailable(`The expression could not be evaluated: ${detail}`)
+  } finally {
+    // Detaching is what removes the browser's "being controlled" banner, so it
+    // has to happen even when the evaluation failed.
+    try {
+      await chrome.debugger.detach(target)
+    } catch {
+      // Already detached; nothing left to release.
+    }
   }
 }
 
@@ -945,6 +1033,11 @@ async function dispatchToolCallUnlocked(
   // goes through the content script and also works on protected pages.
   if (call.name === 'browser_screenshot') {
     return await dispatchScreenshot(tab.id, tab.windowId, call, signal)
+  }
+  // Script execution rides the DevTools protocol, so it bypasses the page's own
+  // CSP and the content script entirely.
+  if (call.name === 'browser_eval') {
+    return await dispatchEval(tab.id, call, signal)
   }
   if (!isInjectablePage(tab.url)) {
     return await dispatchTabNativeTool(tab.id, tab.url, tab.title, tab.windowId, call, effectiveBudget, signal, targetStillAllowed, tabManagement.commitAction)

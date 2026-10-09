@@ -26,6 +26,13 @@ versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   and are rebuilt into a real `File` through a `DataTransfer` list — the same
   shape a drop or paste produces. Reads are capped at 8 MB, the approval prompt
   names the file, and the result reports only its name and size.
+- **`browser_eval`** evaluates a JavaScript expression in the controlled tab and
+  returns its value. MV3 forbids `eval` for extension code, so the page's own
+  engine is the only place an expression can run: the extension attaches to the
+  DevTools protocol, evaluates, and detaches again on every call rather than
+  holding a session open. That needs the `debugger` permission and puts a
+  browser-level "being controlled" banner on screen while a call runs. Every call
+  is approved on its own and the expression is shown in full in that prompt.
 - **`browser_wait`** takes `selector`, `text`, `gone`, and `timeoutMs`, so a call
   can wait for a condition instead of a fixed delay, and reports a clear timeout
   rather than hanging.

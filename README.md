@@ -53,6 +53,7 @@ The paired Playwright / extension duration ratio was **1.24** (95% CI **1.16–1
 | Click element | `browser_click` | Click links, buttons, checkboxes, and other controls by inventory number |
 | Fill forms | `browser_type` | React/Vue-compatible input; picks a `<select>` option by its label or value and toggles checkboxes/radios; `replace` clears the field first |
 | Upload a file | `browser_upload` | Attach a local file to a file input by path; the approval prompt names the file |
+| Run script | `browser_eval` | Evaluate a JavaScript expression in the page through the DevTools protocol and return its value; needs the `debugger` permission |
 | Press keys | `browser_press` | Enter, Tab, Escape, arrows etc. Tab moves focus and Enter/Space run the page's default action |
 | Scroll | `browser_scroll` | Viewport scrolling: up, down, top, and bottom |
 | Navigate | `browser_navigate` / `browser_open_tab` / `browser_back` / `browser_forward` / `browser_reload` | Navigation inside the controlled tab, or open a URL in a new tab and follow it (`active:false` keeps the current tab in front) |

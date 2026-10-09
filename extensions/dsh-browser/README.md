@@ -14,6 +14,7 @@ The **browser-operation end** of dsh: the model reads and operates the browser p
 | Click element | `browser_click` | Click by inventory number (links/buttons/checkboxes…), React/Vue compatible |
 | Fill forms | `browser_type` | Type text, pick a `<select>` option by its visible label or value, or check/uncheck a checkbox or radio; `replace` clears first. A drop-down that matches nothing reports its available options |
 | Upload a file | `browser_upload` | Attach a local file to a file input by path. The approval prompt names the file, and the result reports only its name and size |
+| Run script | `browser_eval` | Evaluate a JavaScript expression in the page and return its value, through the DevTools protocol. Needs the `debugger` permission; every call is approved on its own and the expression is shown in full |
 | Keys | `browser_press` | Enter/Tab/Escape/arrows etc. Tab moves focus and Enter/Space run the page's default action, unless the page handles the key itself |
 | Scroll | `browser_scroll` | Viewport scrolling (up/down/top/bottom) |
 | Navigate | `browser_navigate` / `browser_open_tab` / `browser_back` / `browser_forward` / `browser_reload` | Navigation inside the controlled tab, or open a URL in a new tab and follow it |
@@ -131,6 +132,7 @@ Chrome uses `sidePanel`; Firefox uses `sidebar_action`. Both request `storage` (
 - Accessible cross-origin iframes are snapshotted and operated with stable `(frame, index)` addresses. Restricted or short-lived frames are reported as unavailable without failing the whole page snapshot.
 - Captcha and image-only controls are reported as "elements with no accessible name". `browser_screenshot` lets the model see them, but the user still has to solve them.
 - No automatic token rotation.
+- `browser_eval` declares the `debugger` permission, which is what lets an expression past MV3's ban on `eval`. While a call runs the browser shows a "being controlled" banner; the bridge attaches, evaluates, and detaches again on every call rather than holding a session open.
 - Tool events are still synthetic, so they carry no user activation: APIs that demand a real gesture (file-picker dialogs, fullscreen, clipboard writes, `window.open`) cannot be triggered from a tool call.
 - `browser_press` now moves focus on Tab and runs the default action on Enter/Space, but other native affordances such as arrow-key scrolling are not reproduced.
 - `browser_wait` waits on a selector or text condition within `timeoutMs`, but does not watch arbitrary DOM mutations; a live-updating SPA may be reported as stable.

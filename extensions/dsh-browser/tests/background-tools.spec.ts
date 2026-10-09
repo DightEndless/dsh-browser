@@ -36,6 +36,11 @@ function mockChrome(options: {
   injectionError?: Error
   frames?: Array<{ frameId: number; parentFrameId: number; documentId?: string; url: string }>
   respond?: (message: unknown, frameId: number) => unknown
+  /** What `Runtime.evaluate` answers with, or an Error to make the command fail. */
+  evalResult?: unknown
+  /** Set to false to simulate the debugger permission being withheld. */
+  debuggerGranted?: boolean
+  debuggerAttachError?: Error
 }) {
   const responses = [...(options.responses ?? [OK])]
   const runtimeListeners = new Set<(message: unknown, sender: chrome.runtime.MessageSender) => void>()
@@ -75,10 +80,21 @@ function mockChrome(options: {
   const reload = vi.fn(async () => undefined)
   const remove = vi.fn(async () => undefined)
   const getAllFrames = vi.fn(async () => currentFrames())
+  const debuggerAttach = options.debuggerAttachError === undefined
+    ? vi.fn(async () => undefined)
+    : vi.fn(async () => { throw options.debuggerAttachError })
+  const debuggerDetach = vi.fn(async () => undefined)
+  const debuggerSendCommand = vi.fn(async () => {
+    if (options.evalResult instanceof Error) throw options.evalResult
+    return options.evalResult ?? { result: { type: 'number', value: 42 } }
+  })
+  const permissionsContains = vi.fn(async () => options.debuggerGranted !== false)
   vi.stubGlobal('chrome', {
     tabs: { query, get, sendMessage, update, goBack, goForward, reload, remove },
     scripting: { executeScript },
     webNavigation: { getAllFrames },
+    debugger: { attach: debuggerAttach, detach: debuggerDetach, sendCommand: debuggerSendCommand },
+    permissions: { contains: permissionsContains },
     runtime: {
       onMessage: {
         addListener: (listener: (message: unknown, sender: chrome.runtime.MessageSender) => void) => {
@@ -95,7 +111,23 @@ function mockChrome(options: {
       listener({ type: 'DSH_CONTENT_READY' }, { tab: { id: tabId }, frameId, documentId } as chrome.runtime.MessageSender)
     }
   }
-  return { emitContentReady, executeScript, get, getAllFrames, goBack, goForward, query, reload, remove, sendMessage, update }
+  return {
+    debuggerAttach,
+    debuggerDetach,
+    debuggerSendCommand,
+    emitContentReady,
+    executeScript,
+    get,
+    getAllFrames,
+    goBack,
+    goForward,
+    permissionsContains,
+    query,
+    reload,
+    remove,
+    sendMessage,
+    update,
+  }
 }
 
 afterEach(() => {
@@ -392,6 +424,64 @@ describe('dispatchToolCall', () => {
       ok: false,
       error: { message: expect.stringContaining('did not answer within') },
     })
+  })
+
+  it('evaluates an expression through the debugger and detaches again', async () => {
+    const chromeMock = mockChrome({
+      tab: { id: 7, url: 'https://example.com' },
+      evalResult: { result: { type: 'number', value: 42 } },
+    })
+
+    const answer = await dispatchToolCall(
+      { ...CALL, name: 'browser_eval', args: { expression: '6*7' } },
+      'auto',
+      undefined,
+      async () => 'approved' as const,
+    )
+
+    expect(answer).toMatchObject({ ok: true, result: { text: expect.stringContaining('42') } })
+    expect(chromeMock.debuggerAttach).toHaveBeenCalledTimes(1)
+    expect(chromeMock.debuggerDetach).toHaveBeenCalledTimes(1)
+    expect(chromeMock.debuggerSendCommand).toHaveBeenCalledWith(
+      { tabId: 7 },
+      'Runtime.evaluate',
+      expect.objectContaining({ expression: '6*7' }),
+    )
+  })
+
+  it('detaches the debugger even when the expression throws', async () => {
+    const chromeMock = mockChrome({
+      tab: { id: 7, url: 'https://example.com' },
+      evalResult: { exceptionDetails: { exception: { description: 'ReferenceError: nope is not defined' } } },
+    })
+
+    const answer = await dispatchToolCall(
+      { ...CALL, name: 'browser_eval', args: { expression: 'nope' } },
+      'auto',
+      undefined,
+      async () => 'approved' as const,
+    )
+
+    expect(answer).toMatchObject({ ok: false, error: { message: expect.stringContaining('ReferenceError') } })
+    // The browser's "being controlled" banner only disappears on detach.
+    expect(chromeMock.debuggerDetach).toHaveBeenCalledTimes(1)
+  })
+
+  it('refuses to evaluate when the debugger permission was not granted', async () => {
+    const chromeMock = mockChrome({
+      tab: { id: 7, url: 'https://example.com' },
+      debuggerGranted: false,
+    })
+
+    const answer = await dispatchToolCall(
+      { ...CALL, name: 'browser_eval', args: { expression: '1' } },
+      'auto',
+      undefined,
+      async () => 'approved' as const,
+    )
+
+    expect(answer).toMatchObject({ ok: false, error: { message: expect.stringContaining('debugger') } })
+    expect(chromeMock.debuggerAttach).not.toHaveBeenCalled()
   })
 
   it('dispatches to an explicitly bound background tab without querying the active tab', async () => {

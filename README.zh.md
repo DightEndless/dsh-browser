@@ -53,6 +53,7 @@ Playwright / 扩展的配对耗时比为 **1.24**（95% CI **1.16–1.34**）：
 | 点击元素 | `browser_click` | 按编号点击链接/按钮/复选框等 |
 | 填写表单 | `browser_type` | 输入文本（React/Vue 受控组件兼容）；按可见文字或 value 选下拉框；勾选/取消复选框与单选框；`replace` 清空重填 |
 | 上传文件 | `browser_upload` | 按路径把本地文件挂到文件输入框；审批框会显示文件路径 |
+| 执行脚本 | `browser_eval` | 通过 DevTools 协议在页面里求值 JavaScript 并返回结果；需要 `debugger` 权限 |
 | 按键 | `browser_press` | Enter/Tab/Escape/方向键等。Tab 真正移动焦点，Enter/空格真正触发页面默认行为 |
 | 滚动 | `browser_scroll` | 视口滚动（up/down/top/bottom） |
 | 页面导航 | `browser_navigate` / `browser_open_tab` / `browser_back` / `browser_forward` / `browser_reload` | 受控标签页内导航，或新开标签页并跟随（`active:false` 时保持当前页在前台） |

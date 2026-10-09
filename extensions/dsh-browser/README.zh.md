@@ -14,6 +14,7 @@ dsh 的**浏览器操作端**：让模型直接读取并操作你在浏览器里
 | 点击元素 | `browser_click` | 按编号点击（链接/按钮/复选框…），React/Vue 组件兼容 |
 | 填写表单 | `browser_type` | 输入文本；选下拉框（按可见文字或 value）；勾选/取消复选框与单选框；`replace` 清空重填。下拉框匹配不到时会列出所有可选项 |
 | 上传文件 | `browser_upload` | 按路径把本地文件挂到文件输入框。审批框会显示文件路径，结果只回报文件名与大小 |
+| 执行脚本 | `browser_eval` | 通过 DevTools 协议在页面里求值一段 JavaScript 并返回结果。需要 `debugger` 权限；每次调用单独审批，表达式会原样显示 |
 | 按键 | `browser_press` | Enter/Tab/Escape/方向键等。Tab 真正移动焦点，Enter/空格真正触发页面默认行为，除非页面自己处理了该按键 |
 | 滚动 | `browser_scroll` | 视口滚动（up/down/top/bottom） |
 | 导航 | `browser_navigate` / `browser_open_tab` / `browser_back` / `browser_forward` / `browser_reload` | 受控标签页内跳转，或新开标签页并跟随 |
@@ -131,6 +132,7 @@ Chrome 使用 `sidePanel`，Firefox 使用 `sidebar_action`。两者都申请 `s
 - 可访问的跨源 iframe 会进入快照，并通过稳定的 `(frame, index)` 地址执行操作；受保护或已销毁的 frame 会标记为不可访问，不影响整页快照。
 - 验证码/纯图片按钮会标注"存在无文本可访问名的元素"；`browser_screenshot` 能让模型看见它们，但仍需用户自己作答。
 - 令牌无自动轮换。
+- `browser_eval` 声明了 `debugger` 权限，正是它让表达式得以绕过 MV3 对 `eval` 的禁令。调用期间浏览器会显示"正在被控制"横幅；桥接每次调用都是附加、求值、立即分离，不会长期占用调试会话。
 - 工具产生的事件仍是合成事件，不带 user activation：需要真实手势的 API（文件选择框、全屏、写剪贴板、`window.open`）无法由工具调用触发。
 - `browser_press` 现在会让 Tab 移动焦点、Enter/空格触发默认行为，但方向键滚动等其它原生行为仍未复现。
 - `browser_wait` 支持按选择器/文本条件等待并限时，但不观察任意 DOM 变化（连续刷新的 SPA 仍可能被报为稳定）。
