@@ -23,6 +23,14 @@ versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   produced the image. The viewport path had no test at all — the mock chrome did
   not even define `captureVisibleTab` — so both that and the mime it built
   (`image/image/jpeg`) went unnoticed; both are now pinned by tests.
+- **`fullPage: true` repeated the page instead of capturing it.** A clip
+  rectangle taller than the viewport does not extend the captured area: the
+  compositor repainted the current screenful into everything below the fold, so a
+  long page came back as the same slice stacked down the image, at the device
+  pixel ratio rather than CSS pixels. The capture now grows the layout viewport to
+  the measured page height, waits for the reflow, shoots, and then restores the
+  scroll position and clears the override, so a 5144px page yields a 5144px image
+  and the reader is left where they were.
 - **`browser_upload` attached nothing.** The bridge read the file in a second
   message sent after the approval, but the extension never received that message,
   and the four dispatch sites never named the approval the bridge was waiting for,
