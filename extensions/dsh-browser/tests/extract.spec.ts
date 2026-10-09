@@ -53,6 +53,17 @@ describe('accessibleName', () => {
     expect(accessibleName(document.querySelector('input')!)).toBe('邮件通知')
   })
 
+  it('never uses textarea defaults as their name or wrapping label text', () => {
+    document.body.innerHTML = '<label>Card<textarea autocomplete="cc-number">4111111111111111</textarea></label>'
+    expect(accessibleName(document.querySelector('textarea')!)).toBe('Card')
+    document.body.innerHTML = '<textarea autocomplete="cc-number" placeholder="Card number">4111111111111111</textarea>'
+    expect(accessibleName(document.querySelector('textarea')!)).toBe('Card number')
+    document.querySelector('textarea')!.removeAttribute('placeholder')
+    expect(accessibleName(document.querySelector('textarea')!)).toBe('textarea')
+    document.body.innerHTML = '<label id="card">Card<textarea>4111111111111111</textarea></label><textarea aria-labelledby="card"></textarea>'
+    expect(accessibleName(document.querySelectorAll('textarea')[1]!)).toBe('Card')
+  })
+
   it('falls back to own text then tag name', () => {
     const button = document.createElement('button')
     button.textContent = '  提交  '

@@ -20,6 +20,7 @@ import type { SnapshotBudget } from './snapshot.ts'
 let budget: SnapshotBudget = { maxItems: 60, maxForms: 30, maxChars: DEFAULT_SNAPSHOT_MAX_CHARS }
 
 const ids = new ElementIds()
+let selectionWatchCommandReceived = false
 
 const selectionWatcher = new SelectionWatcher((selection) => {
   void chrome.runtime.sendMessage({ type: 'DSH_SELECTION', selection }).catch(() => {})
@@ -51,6 +52,7 @@ function onMessage(message: unknown, _sender: chrome.runtime.MessageSender, send
     const command = message as { enabled?: unknown; epoch?: unknown; revision?: unknown }
     const epoch = typeof command.epoch === 'string' ? command.epoch : undefined
     const revision = typeof command.revision === 'number' ? command.revision : undefined
+    selectionWatchCommandReceived = true
     selectionWatcher.setEnabled(command.enabled === true, revision, epoch)
     sendResponse({ ok: true })
     return
@@ -108,6 +110,7 @@ chrome.runtime.onMessage.addListener(onMessage)
 // script announces when the new document can accept its automatic snapshot,
 // and learns from the reply whether a side panel wants selection reports.
 void chrome.runtime.sendMessage({ type: 'DSH_CONTENT_READY' }).then((response: unknown) => {
+  if (selectionWatchCommandReceived || contentGlobal[CONTENT_SELECTION_WATCHER] !== selectionWatcher) return
   if (typeof response !== 'object' || response === null) return
   const ready = response as {
     selectionWatch?: unknown

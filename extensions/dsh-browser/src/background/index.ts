@@ -188,6 +188,7 @@ const pageSessionContexts = new PageSessionContextTracker({
   },
 })
 void chrome.storage.session.remove(LEGACY_RECENT_SESSION_STORAGE_KEY).catch(() => {})
+
 /** Ephemeral allowlist: cleared when the last side panel closes or this worker restarts. */
 const sessionTrustedActionOrigins = new Set<string>()
 /** Tool calls that are either withdrawable or completing an already-dispatched action. */
@@ -796,13 +797,81 @@ function affinityFailure(kind: 'handoff' | 'lost' | 'missing'): ToolAnswer {
   return { ok: false, error: { code: 'no-active-tab', message: 'No active tab is available for browser operations.' } }
 }
 
+/** TEMP DIAGNOSTIC: names the precondition that blocked the adoption. */
+async function diagnoseRecovery(sessionId: string | undefined): Promise<string> {
+  const focused = tabAffinity.focusedSession()
+  const focusedTab = focused === null ? undefined : tabAffinity.getSessionTab(focused)
+  let active = 'none'
+  try {
+    const tab = await syncActiveTab()
+    active = tab?.id === undefined ? 'no-id' : `${tab.id}`
+  } catch {
+    active = 'threw'
+  }
+  return `sid=${sessionId === undefined ? 'undefined' : sessionId === '' ? 'empty' : sessionId.slice(-8)}`
+    + ` focused=${focused === null ? 'none' : focused.slice(-8)}`
+    + ` focusedTab=${focusedTab === undefined ? 'none' : focusedTab.tabId}`
+    + ` active=${active}`
+}
+
+/**
+ * The controlled page is gone and no page could be adopted in its place, either
+ * because the focused window has no usable page or because another session still
+ * owns a live one.
+ */
+function recoveryFailure(detail: string): ToolAnswer {
+  return {
+    ok: false,
+    error: {
+      code: 'content-unavailable',
+      message: `The page this conversation controlled is gone, and no page could be adopted (${detail}). Open the side panel on the page you want and choose to use the current page.`,
+    },
+  }
+}
+
+/**
+ * Recover a binding whose controlled tab is gone by adopting the tab the user is
+ * looking at.
+ *
+ * `lost` is otherwise a dead end: the panel shows the *focused session's* tab,
+ * which can look healthy while this session has no binding at all, so there is
+ * no prompt to answer and every tool call fails closed forever. The tab adopted
+ * here is the one the user is already viewing, and it is the same tab the next
+ * `keep`/`follow` decision would have bound, so this restores the existing
+ * binding rather than widening what may be touched.
+ */
+async function recoverLostBinding(sessionId: string | undefined): Promise<boolean> {
+  try {
+    const tab = await syncActiveTab()
+    const summary = tab === undefined ? null : summarizeTab(tab)
+    if (summary === null) return false
+    // Another session blocks the adoption only when it holds a *different*
+    // page. A focus restored from storage routinely points at the same tab, and
+    // refusing there is what turns `lost` into a permanent dead end with no
+    // prompt to answer. The page adopted here is the one the user is already
+    // viewing, so nothing widens beyond it.
+    const focused = tabAffinity.focusedSession()
+    if (sessionId !== undefined && focused !== null && focused !== sessionId) {
+      const other = tabAffinity.getSessionTab(focused)
+      if (other !== undefined && other.tabId !== summary.tabId) return false
+    }
+    commitTabAffinityRebind(summary, sessionId)
+    return true
+  } catch {
+    return false
+  }
+}
+
 /** Resolve one stable tab target without allowing a manual switch to drift it. */
 async function resolveToolTab(sessionId?: string): Promise<Pick<chrome.tabs.Tab, 'id' | 'url' | 'title' | 'windowId'> | ToolAnswer> {
   await affinityReady
   for (let attempt = 0; attempt < 3; attempt += 1) {
     const resolution = tabAffinity.resolveTarget(sessionId)
     if (resolution.kind === 'handoff') return affinityFailure('handoff')
-    if (resolution.kind === 'lost') return affinityFailure('lost')
+    if (resolution.kind === 'lost') {
+      if (await recoverLostBinding(sessionId)) continue
+      return recoveryFailure(await diagnoseRecovery(sessionId))
+    }
     if (resolution.kind === 'initial') {
       if (!await ensureInitialTabBinding(sessionId)) return affinityFailure('missing')
       continue
@@ -814,7 +883,10 @@ async function resolveToolTab(sessionId?: string): Promise<Pick<chrome.tabs.Tab,
       if (tabAffinity.observeTab(summary)) broadcastTabAffinity()
       const current = tabAffinity.resolveTarget(sessionId)
       if (current.kind === 'handoff') return affinityFailure('handoff')
-      if (current.kind === 'lost') return affinityFailure('lost')
+      if (current.kind === 'lost') {
+        if (await recoverLostBinding(sessionId)) continue
+        return recoveryFailure(await diagnoseRecovery(sessionId))
+      }
       if (current.kind === 'target' && current.tab.tabId === summary.tabId) return tab
     } catch {
       const affectedSessions = tabAffinity.sessionIdsForTab(resolution.tab.tabId)
@@ -826,7 +898,8 @@ async function resolveToolTab(sessionId?: string): Promise<Pick<chrome.tabs.Tab,
         persistTabAffinity()
         broadcastTabAffinity()
       }
-      return affinityFailure('lost')
+      if (await recoverLostBinding(sessionId)) continue
+      return recoveryFailure(await diagnoseRecovery(sessionId))
     }
   }
   return affinityFailure('handoff')

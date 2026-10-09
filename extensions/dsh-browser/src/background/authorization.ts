@@ -58,6 +58,21 @@ export function approvalPromptForCall(
       canTrust: destination !== undefined,
     }
   }
+  if (call.name === 'browser_batch') {
+    const targets = batchTargetFrames(call, frames)
+    const hasReadback = call.args.snapshot === true
+    const origins = uniqueOrigins(hasReadback ? frames : targets, frames)
+    return {
+      kind: 'action',
+      action: call.name,
+      summary: batchSummaryWithReadback(call, locale, hasReadback),
+      origins,
+      // A batch may touch several frames and may also read the page back; never
+      // let one approval silently expand the persistent trusted-origin set.
+      canTrust: false,
+    }
+  }
+
   const frameId = requestedFrame(call.args)
   const target = frames.find((frame) => frame.frameId === frameId) ?? frames.find((frame) => frame.frameId === 0)
   const origins = uniqueOrigins(target === undefined ? [] : [target], frames)
@@ -152,8 +167,8 @@ function summarizeAction(call: ToolCall, locale: UiLocale): string {
     // into a page, so the user must see exactly which file is about to leave.
     case 'browser_upload': return localized(
       locale,
-      `Attach the local file “${safeInline(typeof call.args.path === 'string' ? call.args.path : '?')}” to the page${frame}`,
-      `把本地文件「${safeInline(typeof call.args.path === 'string' ? call.args.path : '?')}」上传到页面${frame}`,
+      `Attach the local file “${safeInline(typeof (call.args.pathForApproval ?? call.args.path) === 'string' ? (call.args.pathForApproval ?? call.args.path) as string : '?')}” to the page${frame}`,
+      `把本地文件「${safeInline(typeof (call.args.pathForApproval ?? call.args.path) === 'string' ? (call.args.pathForApproval ?? call.args.path) as string : '?')}」上传到页面${frame}`,
     )
     // The expression is shown in full on purpose: this is the one tool that can
     // run arbitrary code in the page, so the user must see exactly what will run.
@@ -229,6 +244,28 @@ function describeTarget(locale: UiLocale, call: ToolCall, prefix = ''): string {
     )
   }
   return localized(locale, 'an unset target', '一个未指定的位置')
+}
+
+function batchTargetFrames(call: ToolCall, frames: TabFrame[]): TabFrame[] {
+  const ids = new Set<number>()
+  const raw = call.args.actions
+  if (Array.isArray(raw)) {
+    for (const entry of raw) {
+      if (typeof entry !== 'object' || entry === null) continue
+      const args = (entry as { args?: unknown }).args
+      const stepArgs = typeof args === 'object' && args !== null ? args as Record<string, unknown> : {}
+      ids.add(requestedFrame(stepArgs))
+    }
+  }
+  if (ids.size === 0) ids.add(0)
+  return frames.filter((frame) => ids.has(frame.frameId))
+}
+
+function batchSummaryWithReadback(call: ToolCall, locale: UiLocale, hasReadback: boolean): string {
+  const summary = batchSummary(call, locale)
+  return hasReadback
+    ? `${summary}${localized(locale, '; then read the resulting page and iframes', '；然后读取操作后的页面及 iframe')}`
+    : summary
 }
 
 /** Expand one batch into the individual actions it would run, in order. */

@@ -278,6 +278,21 @@ describe('selection watcher', () => {
     expect(emit).toHaveBeenCalledTimes(1)
   })
 
+  it('permanently disposes a revisioned watcher and cancels queued captures', () => {
+    vi.useFakeTimers()
+    selectText('')
+    const emit = vi.fn()
+    const watcher = new SelectionWatcher(emit, 10)
+    watcher.setEnabled(true, 5)
+    selectText('queued highlight')
+    document.dispatchEvent(new Event('selectionchange'))
+    watcher.dispose()
+    expect(watcher.setEnabled(true, 6)).toBe(false)
+    expect(watcher.setEnabled(true, 0, 'new-worker')).toBe(false)
+    vi.advanceTimersByTime(50)
+    expect(emit).not.toHaveBeenCalled()
+  })
+
   it('releases the page listener when it is disarmed', () => {
     vi.useFakeTimers()
     const emit = vi.fn()

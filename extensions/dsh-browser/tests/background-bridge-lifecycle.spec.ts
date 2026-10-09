@@ -60,6 +60,7 @@ function panelPort() {
 function mockChrome(options: {
   localGet?: () => Promise<Record<string, unknown>>
   localSet?: (items: Record<string, unknown>) => Promise<void>
+  sessionGet?: () => Promise<Record<string, unknown>>
   tabGet?: (tabId: number) => Promise<chrome.tabs.Tab>
   tabQuery?: (queryInfo: chrome.tabs.QueryInfo) => Promise<chrome.tabs.Tab[]>
   tabRemove?: (tabId: number) => Promise<void>
@@ -96,7 +97,7 @@ function mockChrome(options: {
         set: vi.fn(options.localSet ?? (async () => {})),
       },
       session: {
-        get: vi.fn(async () => ({})),
+        get: vi.fn(options.sessionGet ?? (async () => ({}))),
         set: vi.fn(async () => {}),
         remove: vi.fn(async () => {}),
       },
@@ -940,5 +941,199 @@ describe('background bridge lifecycle', () => {
       t: 'rpc',
       method: 'bridge.injectBrowserSnapshot',
     }))
+  })
+
+  it('recovers a stale lost binding by controlling the tab being viewed', async () => {
+    const tab = (id: number, title: string): chrome.tabs.Tab =>
+      ({ id, windowId: 1, title, url: 'https://example.com/' }) as chrome.tabs.Tab
+    const chromeMock = mockChrome({
+      localGet: async () => ({
+        dshSettings: {
+          bridgeUrl: 'wss://bridge.example/ext/bridge',
+          unrestrictedBrowserAccess: false,
+          sharePageContent: 'auto',
+        },
+      }),
+      // The previously controlled tab is gone; the worker remembers only "lost".
+      sessionGet: async () => ({
+        dshTabAffinity: {
+          lost: true,
+          sessionTabs: { 'session-editor': { tabId: 231929875, windowId: 1, title: 'Old', url: 'https://old.example/' } },
+        },
+      }),
+      tabQuery: async () => [tab(2, 'Current page')],
+      tabGet: async (tabId: number) => {
+        if (tabId === 231929875) throw new Error(`No tab with id: ${tabId}`)
+        return tab(2, 'Current page')
+      },
+      tabSendMessage: async () => ({ ok: true, result: { text: 'current page snapshot' } }),
+    })
+    vi.stubGlobal('WebSocket', FakeWebSocket)
+    await import('../src/background/index.ts')
+
+    const panel = panelPort()
+    chromeMock.onConnect.emit(panel.port)
+    await vi.waitFor(() => { expect(FakeWebSocket.instances).toHaveLength(1) })
+    const socket = FakeWebSocket.instances[0]!
+    socket.open()
+    await Promise.resolve()
+    socket.receive({
+      t: 'hello.ok',
+      caps: { textOnly: true, snapshotMaxChars: 32_000, maxInteractiveItems: 60 },
+    })
+    await new Promise((resolve) => { setTimeout(resolve, 0) })
+
+    socket.receive({
+      t: 'tool.call',
+      id: 'after-restore',
+      name: 'browser_snapshot',
+      args: {},
+      expiresAt: Date.now() + 10_000,
+    })
+
+    // A snapshot needs no approval, so it must run on the page the user is
+    // actually looking at instead of failing closed forever.
+    await vi.waitFor(() => {
+      expect(chromeMock.tabs.sendMessage).toHaveBeenCalledWith(2, expect.objectContaining({
+        type: 'DSH_ACTION',
+        action: 'browser_snapshot',
+      }), expect.any(Object))
+    })
+    await vi.waitFor(() => {
+      expect(socket.sent).toContainEqual(expect.objectContaining({ t: 'tool.result', id: 'after-restore', ok: true }))
+    })
+  })
+
+  it('adopts the viewed page even when another session is focused on it', async () => {
+    const tab = (id: number, title: string): chrome.tabs.Tab =>
+      ({ id, windowId: 1, title, url: 'https://shared.example/' }) as chrome.tabs.Tab
+    const chromeMock = mockChrome({
+      localGet: async () => ({
+        dshSettings: {
+          bridgeUrl: 'wss://bridge.example/ext/bridge',
+          unrestrictedBrowserAccess: false,
+          sharePageContent: 'auto',
+        },
+      }),
+      // Focus was restored from storage: it names another session, but that
+      // session points at the same live tab the user is viewing.
+      sessionGet: async () => ({
+        dshTabAffinity: {
+          sessionTabs: {
+            'session-editor': { tabId: 2, windowId: 1, title: 'Current page', url: 'https://shared.example/' },
+          },
+          focusedSessionId: 'session-editor',
+        },
+      }),
+      tabQuery: async () => [tab(2, 'Current page')],
+      tabGet: async () => tab(2, 'Current page'),
+      tabSendMessage: async () => ({ ok: true, result: { text: 'current page snapshot' } }),
+    })
+    vi.stubGlobal('WebSocket', FakeWebSocket)
+    await import('../src/background/index.ts')
+
+    const panel = panelPort()
+    chromeMock.onConnect.emit(panel.port)
+    await vi.waitFor(() => { expect(FakeWebSocket.instances).toHaveLength(1) })
+    const socket = FakeWebSocket.instances[0]!
+    socket.open()
+    await Promise.resolve()
+    socket.receive({
+      t: 'hello.ok',
+      caps: { textOnly: true, snapshotMaxChars: 32_000, maxInteractiveItems: 60 },
+    })
+    await new Promise((resolve) => { setTimeout(resolve, 0) })
+
+    socket.receive({
+      t: 'tool.call',
+      id: 'same-page-focus',
+      name: 'browser_snapshot',
+      args: {},
+      expiresAt: Date.now() + 10_000,
+    })
+
+    await vi.waitFor(() => {
+      expect(chromeMock.tabs.sendMessage).toHaveBeenCalledWith(2, expect.objectContaining({
+        type: 'DSH_ACTION',
+        action: 'browser_snapshot',
+      }), expect.any(Object))
+    })
+  })
+
+  it('dispatches the bytes the bridge read for an approved upload', async () => {
+    const actions: Array<Record<string, unknown>> = []
+    const chromeMock = mockChrome({
+      localGet: async () => ({
+        dshSettings: {
+          bridgeUrl: 'wss://bridge.example/ext/bridge',
+          unrestrictedBrowserAccess: false,
+          sharePageContent: 'auto',
+        },
+      }),
+      tabSendMessage: async (_tabId, message) => {
+        const action = message as { type?: string; action?: string } & Record<string, unknown>
+        if (action.type !== 'DSH_ACTION') return undefined
+        actions.push(action)
+        return { ok: true, result: { text: 'done' } }
+      },
+    })
+    vi.stubGlobal('WebSocket', FakeWebSocket)
+    await import('../src/background/index.ts')
+
+    const panel = panelPort()
+    chromeMock.onConnect.emit(panel.port)
+    await vi.waitFor(() => { expect(FakeWebSocket.instances).toHaveLength(1) })
+    const socket = FakeWebSocket.instances[0]!
+    socket.open()
+    await Promise.resolve()
+    socket.receive({
+      t: 'hello.ok',
+      caps: { textOnly: true, snapshotMaxChars: 32_000, maxInteractiveItems: 60 },
+    })
+    // A snapshot first: an indexed element reference is only valid against the
+    // document that snapshot recorded.
+    socket.receive({
+      t: 'tool.call',
+      id: 'upload-baseline',
+      name: 'browser_snapshot',
+      args: {},
+      expiresAt: Date.now() + 10_000,
+    })
+    await vi.waitFor(() => { expect(actions).toContainEqual(expect.objectContaining({ action: 'browser_snapshot' })) })
+    socket.receive({
+      t: 'tool.call',
+      id: 'upload-approved',
+      name: 'browser_upload',
+      args: {
+        index: 4,
+        name: 'dsh-upload.txt',
+        mime: 'text/plain',
+        contentBase64: 'ZHNoIHVwbG9hZCBwcm9iZQ==',
+      },
+      expiresAt: Date.now() + 10_000,
+    })
+    const approval = await vi.waitFor(() => {
+      const message = panel.postMessage.mock.calls
+        .map((args: unknown[]) => args[0] as { type?: string; request?: { id?: string; summary?: string } })
+        .find((value) => value.type === 'approval.request')
+      expect(message?.request?.id).toBeTypeOf('string')
+      return message!
+    })
+
+    // The user approves; the bytes were already on the call, so the page is
+    // told to attach them without any further round trip.
+    panel.onMessage.emit({ type: 'approval.response', id: approval.request!.id, decision: 'allow-once' })
+
+    await vi.waitFor(() => {
+      expect(actions).toContainEqual(expect.objectContaining({
+        action: 'browser_upload',
+        args: expect.objectContaining({
+          index: 4,
+          name: 'dsh-upload.txt',
+          mime: 'text/plain',
+          contentBase64: 'ZHNoIHVwbG9hZCBwcm9iZQ==',
+        }),
+      }))
+    })
   })
 })

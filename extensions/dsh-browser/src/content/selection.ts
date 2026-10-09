@@ -122,6 +122,7 @@ export function readSelectionCapture(): SelectionCapture | null {
  */
 export class SelectionWatcher {
   private enabled = false
+  private disposed = false
   private timer: ReturnType<typeof setTimeout> | undefined
   private lastEmitted: SelectionCapture | null = null
   /** Worker lifetime that issued the current ordering revision. */
@@ -141,6 +142,7 @@ export class SelectionWatcher {
    *   MV3 worker restart while this content script may remain alive.
    */
   setEnabled(next: boolean, revision = 0, epoch = 'legacy'): boolean {
+    if (this.disposed) return false
     if (epoch === this.epoch && revision < this.revision) return false
     this.epoch = epoch
     this.revision = revision
@@ -170,7 +172,11 @@ export class SelectionWatcher {
 
   /** Release page listeners left behind by a replaced content script. */
   dispose(): void {
-    this.setEnabled(false)
+    this.disposed = true
+    this.enabled = false
+    document.removeEventListener('selectionchange', this.onSelectionChange)
+    this.cancel()
+    this.lastEmitted = null
   }
 
   private cancel(): void {

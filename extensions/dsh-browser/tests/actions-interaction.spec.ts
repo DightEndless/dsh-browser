@@ -81,6 +81,74 @@ describe('browser_press default actions', () => {
     expect(result.text).toContain('submitted')
   })
 
+  it.each(['Enter', ' ', 'Spacebar'])('does not submit multiline or non-text controls with %s', async (key) => {
+    for (const markup of ['<textarea></textarea>', '<select><option>One</option></select>', '<div contenteditable="true">edit</div>', '<div tabindex="0">focus</div>']) {
+      document.body.innerHTML = `<form>${markup}<button>Submit</button></form>`
+      const form = document.querySelector('form')!
+      const submitted = vi.fn((event: Event) => event.preventDefault())
+      form.addEventListener('submit', submitted)
+      ;(form.firstElementChild as HTMLElement).focus()
+      await run(await snapshotIds(), 'browser_press', { key })
+      expect(submitted).not.toHaveBeenCalled()
+    }
+  })
+
+  it('does not submit text inputs or activate links with Space', async () => {
+    document.body.innerHTML = '<form><input><a href="#next">Link</a></form>'
+    const submitted = vi.fn((event: Event) => event.preventDefault())
+    const clicked = vi.fn((event: Event) => event.preventDefault())
+    document.querySelector('form')!.addEventListener('submit', submitted)
+    document.querySelector('a')!.addEventListener('click', clicked)
+    for (const el of document.querySelectorAll<HTMLElement>('input, a')) {
+      el.focus()
+      await run(await snapshotIds(), 'browser_press', { key: ' ' })
+    }
+    expect(submitted).not.toHaveBeenCalled()
+    expect(clicked).not.toHaveBeenCalled()
+  })
+
+  it.each(['Enter', ' '])('activates buttons with %s without bypassing their handlers', async (key) => {
+    document.body.innerHTML = '<form><button type="button">Go</button></form>'
+    const clicked = vi.fn()
+    const button = document.querySelector('button')!
+    button.addEventListener('click', clicked)
+    button.focus()
+    await run(await snapshotIds(), 'browser_press', { key })
+    expect(clicked).toHaveBeenCalledTimes(1)
+  })
+
+  it('toggles checkboxes on Space without submitting', async () => {
+    document.body.innerHTML = '<form><input type="checkbox"></form>'
+    const input = document.querySelector('input')!
+    input.focus()
+    await run(await snapshotIds(), 'browser_press', { key: ' ' })
+    expect(input.checked).toBe(true)
+  })
+
+  it('uses the default submitter and respects a disabled default button', async () => {
+    document.body.innerHTML = '<form id="form"><button disabled>Submit</button></form><input form="form">'
+    const input = document.querySelector('input')!
+    const button = document.querySelector('button')!
+    const submitted = vi.fn((event: Event) => event.preventDefault())
+    document.querySelector('form')!.addEventListener('submit', submitted)
+    input.focus()
+    await run(await snapshotIds(), 'browser_press', { key: 'Enter' })
+    expect(submitted).not.toHaveBeenCalled()
+    button.disabled = false
+    await run(await snapshotIds(), 'browser_press', { key: 'Enter' })
+    expect(submitted).toHaveBeenCalledTimes(1)
+    expect((submitted.mock.calls[0]![0] as SubmitEvent).submitter).toBe(button)
+  })
+
+  it('does not implicitly submit multiple text inputs without a submit button', async () => {
+    document.body.innerHTML = '<form><input><input></form>'
+    const submitted = vi.fn((event: Event) => event.preventDefault())
+    document.querySelector('form')!.addEventListener('submit', submitted)
+    document.querySelector('input')!.focus()
+    await run(await snapshotIds(), 'browser_press', { key: 'Enter' })
+    expect(submitted).not.toHaveBeenCalled()
+  })
+
   it('leaves the key alone when the page already handled it', async () => {
     document.body.innerHTML = '<input id="a"><input id="b">'
     const first = document.getElementById('a')!

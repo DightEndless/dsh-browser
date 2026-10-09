@@ -413,6 +413,8 @@ function defineTools(call: BrowserTargetCall, options: BrowserToolsOptions): Too
     output: TEXT_OUTPUT,
     execute: async (args, exec) => {
       const a = args as { index: number; path: string; name?: string; mime?: string; frame?: number }
+      // Read up front: a waiting extension would otherwise never receive the
+      // bytes, because only this side can turn a path into content.
       const file = await readUploadFile(a.path, a.name, a.mime)
       if ('error' in file) return { text: file.error }
       return call(exec, 'browser_upload', {

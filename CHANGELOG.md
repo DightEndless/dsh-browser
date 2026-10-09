@@ -10,6 +10,37 @@ change:
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased — 2026-10-10
+
+### Fixed
+
+- **`browser_upload` attached nothing.** The bridge read the file in a second
+  message sent after the approval, but the extension never received that message,
+  and the four dispatch sites never named the approval the bridge was waiting for,
+  so every upload timed out no matter what the user answered. The bridge now reads
+  the file up front and the approved dispatch carries the bytes, which makes the
+  seam work across version mismatches in either direction. A failed upload names
+  the missing file instead of blaming the page.
+- **A lost tab binding was a dead end.** When the stored tab was gone, every page
+  tool answered "The controlled tab was closed" and no prompt was shown, so a
+  session could not recover on its own. A stale binding is now re-established on
+  the next tool call and adopts the tab the user is actually looking at; the guard
+  refuses only when another session already holds a *different* page.
+
+### Removed
+
+- The unused `tool.approved` / `tool.upload` protocol frames, the extension-side
+  waiter that held them, and the temporary upload diagnostics. Nothing on either
+  side sends or reads them.
+
+### Tests
+
+- Batch coverage for `browser_batch` with `snapshot: true`, a lifecycle test for
+  recovered bindings, and an upload test that asserts the bytes the bridge read
+  reach the dispatch. The batch privacy test now uses `browser_eval`, because the
+  whitelist rejected its previous `browser_snapshot` step before the privacy gate
+  could be the thing under test.
+
 ## Extension 0.3.0 / bridge package 0.2.0 — 2026-10-09
 
 ### Added

@@ -557,25 +557,38 @@ function moveFocus(backwards: boolean): string {
   return `focus moved to <${element.tagName.toLowerCase()}>${described}`
 }
 
-/**
- * Perform the default action a real Enter press would trigger. Unlike a bare
- * `submit` event, `requestSubmit` runs validation and actually submits.
- */
-function activateFocused(target: HTMLElement): string {
-  if (target instanceof HTMLInputElement && (target.type === 'submit' || target.type === 'image')) {
-    target.click()
-    return 'activated the focused submit control'
-  }
-  if (target instanceof HTMLButtonElement || target instanceof HTMLAnchorElement) {
+/** Activate only controls with a native default for this key. */
+function activateFocused(target: HTMLElement, key: string): string {
+  const noAction = 'the key had no default action here'
+  if (target.matches(':disabled') || Boolean((isEditable as (el: Element) => boolean)(target))) return noAction
+  const enter = key === 'Enter'
+  if (target instanceof HTMLButtonElement
+    || (enter && target instanceof HTMLAnchorElement && target.hasAttribute('href'))
+    || (target instanceof HTMLInputElement && (
+      ['submit', 'image', 'button', 'reset'].includes(target.type)
+      || (!enter && ['checkbox', 'radio'].includes(target.type))
+    ))) {
     target.click()
     return 'activated the focused control'
   }
-  const form = target instanceof HTMLFormElement ? target : target.closest('form')
-  if (form !== null) {
-    form.requestSubmit()
-    return 'submitted the surrounding form'
+  // Only single-line text controls support implicit submission. A textarea,
+  // select, editable host, or arbitrary focusable descendant must never submit.
+  const blockingTypes = ['text', 'search', 'tel', 'url', 'email', 'password', 'date', 'month', 'week', 'time', 'datetime-local', 'number']
+  if (!enter || !(target instanceof HTMLInputElement) || !blockingTypes.includes(target.type)) return noAction
+  const form = target.form
+  if (form === null) return noAction
+  const controls = [...form.elements]
+  const submitter = [...document.querySelectorAll('button, input')].find((el) =>
+    (el instanceof HTMLButtonElement && el.form === form && el.type === 'submit')
+    || (el instanceof HTMLInputElement && el.form === form && ['submit', 'image'].includes(el.type)))
+  if (submitter instanceof HTMLElement) {
+    if (submitter.matches(':disabled')) return noAction
+    submitter.click()
+    return 'activated the default submit control'
   }
-  return 'the key had no default action here'
+  if (controls.filter((el) => el instanceof HTMLInputElement && blockingTypes.includes(el.type)).length > 1) return noAction
+  form.requestSubmit()
+  return 'submitted the surrounding form'
 }
 
 async function pressAction(args: Record<string, unknown>, ctx: ActionContext): Promise<ActionResult> {
@@ -593,9 +606,9 @@ async function pressAction(args: Record<string, unknown>, ctx: ActionContext): P
   } else if (key === 'Tab') {
     note = moveFocus(shift)
   } else if (key === 'Enter') {
-    note = activateFocused(target)
+    note = activateFocused(target, key)
   } else if (key === ' ' || key === 'Spacebar') {
-    note = activateFocused(target)
+    note = activateFocused(target, key)
   }
   target.dispatchEvent(new KeyboardEvent('keyup', init))
   await waitForPageSettled(ACTION_SETTLE)

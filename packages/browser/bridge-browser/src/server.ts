@@ -118,6 +118,9 @@ interface PendingTool {
   resolve: (result: unknown) => void
   reject: (error: BridgeToolError) => void
   timer: NodeJS.Timeout
+  owner: ReadyConnection
+  onAbort: () => void
+  signal: AbortSignal
 }
 
 /** Options for one model-facing browser action. */
@@ -284,7 +287,14 @@ export class BridgeServer {
         cancel(new BridgeToolError('timeout', `browser action "${name}" timed out after ${timeoutMs}ms`))
       }, timeoutMs)
       signal.addEventListener('abort', onAbort, { once: true })
-      this.pendingTools.set(id, { resolve, reject, timer })
+      this.pendingTools.set(id, {
+        resolve,
+        reject,
+        timer,
+        owner: conn,
+        onAbort,
+        signal,
+      })
       conn.ws.send(JSON.stringify({
         t: 'tool.call',
         id,
@@ -410,9 +420,11 @@ export class BridgeServer {
   }
 
   /** Reject every in-flight tool call with the same error. */
-  private settleAllPending(code: ToolErrorCode, message: string): void {
+  private settleAllPending(code: ToolErrorCode, message: string, owner?: ReadyConnection): void {
     for (const [id, pending] of this.pendingTools) {
+      if (owner !== undefined && pending.owner !== owner) continue
       clearTimeout(pending.timer)
+      pending.signal.removeEventListener('abort', pending.onAbort)
       this.pendingTools.delete(id)
       pending.reject(new BridgeToolError(code, message))
     }
@@ -538,7 +550,7 @@ export class BridgeServer {
     }
     if (this.lastActive === conn) this.lastActive = this.connections.values().next().value ?? null
     if (this.defaultBrowserId === conn.id) this.defaultBrowserId = undefined
-    this.settleAllPending('bridge-closed', 'the extension connection was replaced')
+    this.settleAllPending('bridge-closed', 'the extension connection was replaced', conn)
   }
 
   /** Look up the registry entry that owns one socket. */
@@ -685,11 +697,10 @@ export class BridgeServer {
 
   private settleTool(conn: ReadyConnection, id: string, ok: boolean, payload: unknown): void {
     const pending = this.pendingTools.get(id)
-    if (pending === undefined) return
+    if (pending === undefined || pending.owner !== conn) return
     clearTimeout(pending.timer)
+    pending.signal.removeEventListener('abort', pending.onAbort)
     this.pendingTools.delete(id)
-    // The browser that answered the last call is where the model is working,
-    // so untargeted calls keep following it.
     if (this.connections.get(conn.id) === conn) this.lastActive = conn
     if (ok) pending.resolve(payload)
     else pending.reject(new BridgeToolError(payloadCode(payload), payloadMessage(payload)))

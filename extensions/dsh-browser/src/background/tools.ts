@@ -165,6 +165,8 @@ export interface TabManagementContext {
    * The page-content privacy gate is independent of it and still applies.
    */
   preAuthorized?: boolean
+  /** Documents covered by the outer batch approval, checked on every step. */
+  approvedFrames?: TabFrame[]
   /** Hide per-step page deltas so one batch does not return the page N times. */
   suppressActionDelta?: boolean
   /** Controlled tab for the calling session, when one still exists. */
@@ -496,13 +498,18 @@ function renderRemoteValue(remote: RemoteValue | undefined): string {
 async function runWithDebugger(
   tabId: number,
   run: (target: chrome.debugger.Debuggee) => Promise<ToolAnswer>,
+  check: () => ToolAnswer | undefined = () => undefined,
 ): Promise<ToolAnswer> {
+  const initial = check()
+  if (initial !== undefined) return initial
   let granted = false
   try {
     granted = await chrome.permissions.contains({ permissions: ['debugger'] })
   } catch {
     granted = false
   }
+  const permissionCheck = check()
+  if (permissionCheck !== undefined) return permissionCheck
   if (!granted) {
     return unavailable('This needs the "debugger" permission, which this extension was not granted.')
   }
@@ -512,6 +519,11 @@ async function runWithDebugger(
   } catch (error: unknown) {
     const detail = error instanceof Error ? error.message : String(error)
     return unavailable(`Could not attach the debugger: ${detail}. DevTools open on this tab will block it.`)
+  }
+  const attachedCheck = check()
+  if (attachedCheck !== undefined) {
+    try { await chrome.debugger.detach(target) } catch { /* already detached */ }
+    return attachedCheck
   }
   try {
     return await run(target)
@@ -551,7 +563,7 @@ async function dispatchEval(tabId: number, call: ToolCall, signal?: AbortSignal)
           ?? 'the expression threw'
         return { ok: false, error: { code: 'action-failed', message: `The expression threw: ${detail}` } }
       }
-      return { ok: true, result: { text: `Expression result:\n${renderRemoteValue(answer.result)}` } }
+      return { ok: true, result: { text: wrapUntrustedContent(`Expression result:\n${renderRemoteValue(answer.result)}`, DEFAULT_SNAPSHOT_MAX_CHARS) } }
     } catch (error: unknown) {
       const detail = error instanceof Error ? error.message : String(error)
       return unavailable(`The expression could not be evaluated: ${detail}`)
@@ -817,7 +829,6 @@ async function dispatchBatch(
   tabManagement: TabManagementContext,
 ): Promise<ToolAnswer> {
   if (tab.id === undefined) return unavailable('No active tab is available for browser operations.')
-  const tabId = tab.id
   const parsed = parseBatchSteps(call.args.actions)
   if (isToolAnswer(parsed)) return parsed
   const stopOnError = call.args.stopOnError !== false
@@ -857,10 +868,16 @@ async function dispatchBatch(
   const parts = [headline, ...lines]
   if (call.args.snapshot === true && failedAt === undefined) {
     try {
-      const refreshed = await listTabFrames(tabId, tab.url)
-      const snapshot = await snapshotAllFrames(tabId, refreshed, { ...call, name: 'browser_snapshot', args: {} }, budget)
+      const snapshot = await dispatchToolCallUnlocked(
+        { ...call, name: 'browser_snapshot', args: {} },
+        sharePageContent, budget, authorize, signal, tab, targetStillAllowed,
+        { ...tabManagement, preAuthorized: false, suppressActionDelta: true },
+      )
+      if (isCancelled(call, signal)) return cancelled()
+      if (targetStillAllowed?.() === false) return targetChanged()
       const text = answerText(snapshot)
       if (text !== undefined) parts.push('', 'Page state after the batch:', text)
+      else parts.push('', `Page state was not captured: ${snapshot.error?.message ?? 'unavailable'}`)
     } catch {
       parts.push('', 'The page could not be read back after the batch; call browser_snapshot.')
     }
@@ -913,7 +930,7 @@ function isCancelled(call: ToolCall, signal: AbortSignal | undefined): boolean {
 }
 
 function withoutFrame(args: Record<string, unknown>): Record<string, unknown> {
-  const { frame: _frame, ...rest } = args
+  const { frame: _frame, pathForApproval: _pathForApproval, ...rest } = args
   return rest
 }
 
@@ -1412,6 +1429,14 @@ async function dispatchToolCallUnlocked(
     && PAGE_CONTENT_TOOL_NAMES.has(call.name)) {
     return { ok: false, error: { code: 'action-failed', message: 'Page content sharing is disabled in Settings > Page content sharing.' } }
   }
+  if (call.name === 'browser_batch') {
+    const steps = parseBatchSteps(call.args.actions)
+    if (isToolAnswer(steps)) return steps
+    if (!tabManagement.unrestrictedAccess && sharePageContent === 'off'
+      && steps.some((step) => PAGE_CONTENT_TOOL_NAMES.has(step.tool))) {
+      return { ok: false, error: { code: 'action-failed', message: 'Page content sharing is disabled in Settings > Page content sharing.' } }
+    }
+  }
   const tab = targetTab ?? (await chrome.tabs.query({ active: true, lastFocusedWindow: true }))[0]
   if (isCancelled(call, signal)) return cancelled()
   if (tab?.id === undefined) {
@@ -1421,6 +1446,10 @@ async function dispatchToolCallUnlocked(
   const frames = await listTabFrames(tab.id, tab.url)
   if (isCancelled(call, signal)) return cancelled()
   if (targetStillAllowed?.() === false) return targetChanged()
+  if (tabManagement.approvedFrames !== undefined
+    && !sameTargetDocument(call, tabManagement.approvedFrames, frames)) {
+    return unavailable('The page changed after batch approval. Call browser_snapshot again before retrying.')
+  }
   const frameError = validateFrameTarget(call, frames)
   if (frameError !== undefined) return frameError
   if (!isInjectablePage(tab.url) && !TAB_NATIVE_TOOLS.has(call.name)) {
@@ -1491,7 +1520,7 @@ async function dispatchToolCallUnlocked(
       authorize,
       signal,
       targetStillAllowed,
-      tabManagement,
+      { ...tabManagement, approvedFrames: approval === undefined ? undefined : executionFrames },
     )
   }
   if (!isInjectablePage(tab.url)) {
@@ -1561,6 +1590,15 @@ async function dispatchToolCallUnlocked(
 }
 
 function validateFrameTarget(call: ToolCall, frames: TabFrame[]): ToolAnswer | undefined {
+  if (call.name === 'browser_batch') {
+    const steps = parseBatchSteps(call.args.actions)
+    if (isToolAnswer(steps)) return steps
+    for (const step of steps) {
+      const error = validateFrameTarget({ ...call, name: step.tool, args: step.args }, frames)
+      if (error !== undefined) return error
+    }
+    return undefined
+  }
   if (call.name === 'browser_snapshot') return undefined
   const frameId = requestedFrame(call.args)
   if (frameId < 0) return { ok: false, error: { code: 'action-failed', message: 'frame must be a non-negative integer.' } }
@@ -1571,11 +1609,21 @@ function validateFrameTarget(call: ToolCall, frames: TabFrame[]): ToolAnswer | u
 }
 
 function validateElementTarget(call: ToolCall, tabId: number, frames: TabFrame[]): ToolAnswer | undefined {
+  if (call.name === 'browser_batch') {
+    const steps = parseBatchSteps(call.args.actions)
+    if (isToolAnswer(steps)) return steps
+    for (const step of steps) {
+      const error = validateElementTarget({ ...call, name: step.tool, args: step.args }, tabId, frames)
+      if (error !== undefined) return error
+    }
+    return undefined
+  }
   if (!INDEX_ADDRESSED_TOOLS.has(call.name)) return undefined
-  // hover and drag also accept a bare viewport point, which has no inventory
-  // entry for this check to protect.
-  if (typeof call.args.index !== 'number'
-    && (call.name === 'browser_hover' || call.name === 'browser_drag')) return undefined
+  // Coordinate-only gestures do not consume snapshot inventory entries.
+  const usesIndex = call.name === 'browser_drag'
+    ? typeof call.args.fromIndex === 'number' || typeof call.args.toIndex === 'number'
+    : typeof call.args.index === 'number'
+  if (!usesIndex && (call.name === 'browser_hover' || call.name === 'browser_drag')) return undefined
   const frameId = requestedFrame(call.args)
   const frame = frames.find((candidate) => candidate.frameId === frameId)
   const snapshotted = snapshotDocumentsByTab.get(tabId)?.get(frameId)
@@ -1593,6 +1641,11 @@ function sameApprovalBoundary(before: ApprovalPrompt, after: ApprovalPrompt): bo
 }
 
 function sameTargetDocument(call: ToolCall, before: TabFrame[], after: TabFrame[]): boolean {
+  if (call.name === 'browser_batch') {
+    const steps = parseBatchSteps(call.args.actions)
+    return !isToolAnswer(steps) && steps.every((step) =>
+      sameTargetDocument({ ...call, name: step.tool, args: step.args }, before, after))
+  }
   const frameId = requestedFrame(call.args)
   const beforeFrame = before.find((frame) => frame.frameId === frameId)
   const afterFrame = after.find((frame) => frame.frameId === frameId)

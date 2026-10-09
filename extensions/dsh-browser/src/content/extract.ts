@@ -97,7 +97,7 @@ export function accessibleName(el: Element): string {
   const labelledBy = el.getAttribute('aria-labelledby')
   if (labelledBy !== null) {
     const ref = document.getElementById(labelledBy.split(/\s+/)[0] ?? '')
-    const refText = ref?.textContent
+    const refText = ref === null ? undefined : nameText(ref)
     if (refText !== undefined && refText.trim() !== '') return truncate(clean(refText), MAX_ITEM_NAME_CHARS).text
   }
 
@@ -105,16 +105,17 @@ export function accessibleName(el: Element): string {
   if (labelable) {
     if (el.id !== '') {
       const label = el.ownerDocument.querySelector<HTMLLabelElement>(`label[for="${cssEscape(el.id)}"]`)
-      const labelText = label?.textContent
+      const labelText = label == null ? undefined : nameText(label)
       if (labelText !== undefined && labelText.trim() !== '') return truncate(clean(labelText), MAX_ITEM_NAME_CHARS).text
     }
-    const wrappingLabelText = el.closest('label')?.textContent
+    const wrappingLabel = el.closest('label')
+    const wrappingLabelText = wrappingLabel === null ? undefined : nameText(wrappingLabel)
     if (wrappingLabelText !== undefined && wrappingLabelText.trim() !== '') {
       return truncate(clean(wrappingLabelText), MAX_ITEM_NAME_CHARS).text
     }
   }
 
-  const ownText = el instanceof HTMLInputElement ? '' : el.textContent
+  const ownText = el instanceof HTMLInputElement ? '' : nameText(el)
   if (ownText !== undefined && ownText.trim() !== '') return truncate(clean(ownText), MAX_ITEM_NAME_CHARS).text
 
   if (el instanceof HTMLInputElement) {
@@ -128,7 +129,18 @@ export function accessibleName(el: Element): string {
     return truncate(clean(el.type), MAX_ITEM_NAME_CHARS).text
   }
 
+  if (el instanceof HTMLTextAreaElement && el.placeholder !== '') {
+    return truncate(clean(el.placeholder), MAX_ITEM_NAME_CHARS).text
+  }
   return el.tagName.toLowerCase()
+}
+
+/** Field contents are data, including textarea defaults nested in labels. */
+function nameText(el: Element): string {
+  if (el instanceof HTMLTextAreaElement) return ''
+  const copy = el.cloneNode(true) as Element
+  for (const field of copy.querySelectorAll('textarea')) field.remove()
+  return copy.textContent ?? ''
 }
 
 /** CSS.escape with a fallback for environments that lack it (jsdom). */

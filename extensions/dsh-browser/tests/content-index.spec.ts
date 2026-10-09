@@ -5,6 +5,8 @@ const LISTENER_KEY = '__dshBrowserContentScriptListener__'
 const WATCHER_KEY = '__dshBrowserSelectionWatcher__'
 
 afterEach(() => {
+  ;((globalThis as Record<string, unknown>)[WATCHER_KEY] as { dispose: () => void } | undefined)?.dispose()
+  vi.useRealTimers()
   Reflect.deleteProperty(navigator, 'userActivation')
   delete (globalThis as Record<string, unknown>)[LISTENER_KEY]
   delete (globalThis as Record<string, unknown>)[WATCHER_KEY]
@@ -54,6 +56,38 @@ describe('selection watch arming', () => {
     window.getSelection = () => null
     return sendMessage
   }
+
+  it('ignores a ready reply from a replaced content script', async () => {
+    vi.useFakeTimers()
+    let resolveReady!: (value: unknown) => void
+    const ready = new Promise((resolve) => { resolveReady = resolve })
+    const sendMessage = stubChrome(ready)
+    await import('../src/content/index.ts')
+    vi.resetModules()
+    sendMessage.mockImplementation(async () => ({ selectionWatch: false }))
+    await import('../src/content/index.ts')
+    window.getSelection = () => ({ toString: () => 'quoted text' }) as unknown as Selection
+    resolveReady({ selectionWatch: true, selectionWatchRevision: 5 })
+    await vi.advanceTimersByTimeAsync(400)
+    document.dispatchEvent(new Event('selectionchange'))
+    await vi.advanceTimersByTimeAsync(400)
+    expect(sendMessage).toHaveBeenCalledTimes(2)
+  })
+
+  it('ignores ready replies after an explicit watch command from a fresh worker', async () => {
+    vi.useFakeTimers()
+    let resolveReady!: (value: unknown) => void
+    const sendMessage = stubChrome(new Promise((resolve) => { resolveReady = resolve }))
+    await import('../src/content/index.ts')
+    const listener = (globalThis as Record<string, unknown>)[LISTENER_KEY] as Function
+    listener({ type: 'DSH_SELECTION_WATCH', enabled: false, epoch: 'new-worker', revision: 0 }, {}, vi.fn())
+    window.getSelection = () => ({ toString: () => 'quoted text' }) as unknown as Selection
+    resolveReady({ selectionWatch: true, selectionWatchEpoch: 'old-worker', selectionWatchRevision: 5 })
+    await vi.advanceTimersByTimeAsync(400)
+    document.dispatchEvent(new Event('selectionchange'))
+    await vi.advanceTimersByTimeAsync(400)
+    expect(sendMessage).toHaveBeenCalledTimes(1)
+  })
 
   it('does not report selections until the service worker asks for them', async () => {
     const sendMessage = stubChrome({ selectionWatch: false })
