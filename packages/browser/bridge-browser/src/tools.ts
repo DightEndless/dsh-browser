@@ -64,6 +64,7 @@ export const BROWSER_TOOL_NAMES = [
   'browser_click',
   'browser_type',
   'browser_press',
+  'browser_upload',
   'browser_scroll',
   'browser_navigate',
   'browser_open_tab',
@@ -181,6 +182,42 @@ function extractScreenshot(result: unknown): ScreenshotPayload | undefined {
   return { mime, base64 }
 }
 
+/** Hard ceiling on one uploaded file, kept well under the WebSocket frame limit. */
+const MAX_UPLOAD_BYTES = 8 * 1024 * 1024
+
+/**
+ * Read one local file for `browser_upload`.
+ *
+ * A file input cannot be filled from script alone, so the bytes have to travel
+ * from this machine into the page. That makes this the one place the plugin
+ * reads a file the user never passed as a tool argument, so it stays narrow: one
+ * path, a size ceiling, and base64 on the wire. The approval prompt for the call
+ * names the path, so the user always sees what is about to leave.
+ */
+async function readUploadFile(path: string, name?: string, mime?: string): Promise<
+  { name: string; mime: string; base64: string } | { error: string }
+> {
+  try {
+    const { readFile, stat } = await import('node:fs/promises')
+    const { basename } = await import('node:path')
+    const info = await stat(path)
+    if (!info.isFile()) return { error: `browser_upload needs a regular file, but ${path} is not one.` }
+    if (info.size > MAX_UPLOAD_BYTES) {
+      const mb = Math.round(info.size / 1024 / 1024)
+      return { error: `${path} is about ${mb} MB, over the ${MAX_UPLOAD_BYTES / 1024 / 1024} MB upload ceiling.` }
+    }
+    const bytes = await readFile(path)
+    return {
+      name: name === undefined || name === '' ? basename(path) : name,
+      mime: mime === undefined || mime === '' ? 'application/octet-stream' : mime,
+      base64: bytes.toString('base64'),
+    }
+  } catch (error: unknown) {
+    const detail = error instanceof Error ? error.message : String(error)
+    return { error: `Could not read ${path}: ${detail}` }
+  }
+}
+
 /** Write the captured image to a temp file and report its path to the model. */
 async function screenshotResult(
   result: unknown,
@@ -283,6 +320,32 @@ function defineTools(call: BrowserTargetCall, options: BrowserToolsOptions): Too
     timeoutMs: options.toolTimeoutMs,
     output: TEXT_OUTPUT,
     execute: (args, exec) => call(exec, 'browser_press', args as Record<string, unknown>),
+  })
+
+  const upload = (): ToolDefinition => defineTool({
+    name: 'browser_upload',
+    description: withTargetHint('Attach a local file to a file input from the latest browser_snapshot. Its bytes are read from this machine and are never returned in the result.'),
+    parameters: {
+      index: { type: 'number', required: true, description: 'Form-field index of the file input.' },
+      path: { type: 'string', required: true, description: 'Absolute path of the local file to attach.' },
+      name: { type: 'string', description: "File name shown in the page. Defaults to the path's base name." },
+      mime: { type: 'string', description: 'MIME type. Defaults to application/octet-stream.' },
+      frame: FRAME_PARAMETER,
+    },
+    timeoutMs: options.toolTimeoutMs,
+    output: TEXT_OUTPUT,
+    execute: async (args, exec) => {
+      const a = args as { index: number; path: string; name?: string; mime?: string; frame?: number }
+      const file = await readUploadFile(a.path, a.name, a.mime)
+      if ('error' in file) return { text: file.error }
+      return call(exec, 'browser_upload', {
+        index: a.index,
+        name: file.name,
+        mime: file.mime,
+        contentBase64: file.base64,
+        ...a.frame !== undefined ? { frame: a.frame } : {},
+      })
+    },
   })
 
   const scroll = (): ToolDefinition => defineTool({
@@ -473,6 +536,7 @@ function defineTools(call: BrowserTargetCall, options: BrowserToolsOptions): Too
     click(),
     type(),
     press(),
+    upload(),
     scroll(),
     navigate(),
     openTab(),

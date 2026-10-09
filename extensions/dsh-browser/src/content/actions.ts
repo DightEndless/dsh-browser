@@ -177,6 +177,8 @@ export async function runAction(action: string, args: Record<string, unknown>, c
       return typeAction(args, ctx)
     case 'browser_press':
       return pressAction(args, ctx)
+    case 'browser_upload':
+      return uploadAction(args, ctx)
     case 'browser_scroll':
       return scrollAction(args, ctx)
     case 'browser_navigate':
@@ -468,6 +470,44 @@ async function typeAction(args: Record<string, unknown>, ctx: ActionContext): Pr
   }
   await waitForPageSettled(TYPE_SETTLE)
   return withPageDelta(`Entered ${text.length} characters into [${index}].`, ctx)
+}
+
+/**
+ * Attach a file to an `<input type=file>`.
+ *
+ * The browser refuses to let script assign a path, so the bytes arrive as base64,
+ * are rebuilt into a real `File`, and are handed over as a `DataTransfer` list —
+ * the same shape a drop or a paste produces. The page then sees an ordinary
+ * `input` + `change`, which is what its own handlers listen for.
+ */
+async function uploadAction(args: Record<string, unknown>, ctx: ActionContext): Promise<ActionResult> {
+  const index = numberArg(args, 'index')
+  const name = typeof args.name === 'string' && args.name !== '' ? args.name : 'upload.bin'
+  const mime = typeof args.mime === 'string' && args.mime !== '' ? args.mime : 'application/octet-stream'
+  const base64 = typeof args.contentBase64 === 'string' ? args.contentBase64 : ''
+  if (base64 === '') throw new ActionError('bad-args', 'contentBase64 must not be empty.')
+  const el = elementOrThrow(ctx.ids, index)
+  if (!(el instanceof HTMLInputElement) || el.type !== 'file') {
+    throw new ActionError('action-failed', `Element [${index}] is not a file input (${el.tagName.toLowerCase()}).`)
+  }
+  // Build the bytes on an explicit ArrayBuffer: a plain Uint8Array is typed as
+  // Uint8Array<ArrayBufferLike>, which TypeScript will not accept as a BlobPart.
+  let bytes: ArrayBuffer
+  try {
+    const binary = atob(base64)
+    bytes = new ArrayBuffer(binary.length)
+    const view = new Uint8Array(bytes)
+    for (let i = 0; i < binary.length; i += 1) view[i] = binary.charCodeAt(i)
+  } catch {
+    throw new ActionError('bad-args', 'contentBase64 is not valid base64.')
+  }
+  const transfer = new DataTransfer()
+  transfer.items.add(new File([bytes], name, { type: mime }))
+  el.files = transfer.files
+  el.dispatchEvent(new Event('input', { bubbles: true }))
+  el.dispatchEvent(new Event('change', { bubbles: true }))
+  await waitForPageSettled(ACTION_SETTLE)
+  return withPageDelta(`Attached “${name}” (${bytes.byteLength} bytes, ${mime}) to file input [${index}].`, ctx)
 }
 
 /** Elements a real Tab press would step through. */

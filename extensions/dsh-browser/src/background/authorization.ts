@@ -10,6 +10,7 @@ const STATE_CHANGING_ACTIONS = new Set([
   'browser_click',
   'browser_type',
   'browser_press',
+  'browser_upload',
   'browser_navigate',
   'browser_open_tab',
   'browser_back',
@@ -139,6 +140,13 @@ function summarizeAction(call: ToolCall, locale: UiLocale): string {
       locale,
       `Press “${safeInline(typeof call.args.key === 'string' ? call.args.key : '')}”${frame}`,
       `发送按键「${safeInline(typeof call.args.key === 'string' ? call.args.key : '')}」${frame}`,
+    )
+    // The path is shown on purpose: this is the one tool that sends a local file
+    // into a page, so the user must see exactly which file is about to leave.
+    case 'browser_upload': return localized(
+      locale,
+      `Attach the local file “${safeInline(typeof call.args.path === 'string' ? call.args.path : '?')}” to the page${frame}`,
+      `把本地文件「${safeInline(typeof call.args.path === 'string' ? call.args.path : '?')}」上传到页面${frame}`,
     )
     case 'browser_navigate': return localized(
       locale,

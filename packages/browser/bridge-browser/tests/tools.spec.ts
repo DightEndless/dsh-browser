@@ -233,10 +233,10 @@ describe('registerBrowserTools', () => {
     registerBrowserTools(ctx, bridge, { toolTimeoutMs: 5_000, snapshotMaxChars: 12_000, maxInteractiveItems: 60 })
     const descriptionChars = registered.reduce((sum, { definition }) => sum + String(definition.description).length, 0)
     // Raised from 1500 when multi-browser routing added browser_use plus the
-    // per-tool routing hint; raised again to 2800 when browser_screenshot joined
-    // the set and browser_wait gained condition arguments; the budget still
-    // guards against description bloat.
-    expect(descriptionChars).toBeLessThan(2_800)
+    // per-tool routing hint, and again as the tool set itself grew (screenshot,
+    // upload, condition arguments on wait). The budget still guards against
+    // bloat: it tracks how many tools there are, not the size of any one.
+    expect(descriptionChars).toBeLessThan(3_200)
   })
 
   it('exposes optional frame routing on frame-local tools only', () => {

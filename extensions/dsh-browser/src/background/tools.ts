@@ -52,6 +52,7 @@ const ACTION_DELTA_TOOLS = new Set([
   'browser_click',
   'browser_type',
   'browser_press',
+  'browser_upload',
   'browser_scroll',
   'browser_wait',
 ])
@@ -75,6 +76,7 @@ const STATE_CHANGING_PAGE_TOOLS = new Set([
   'browser_click',
   'browser_type',
   'browser_press',
+  'browser_upload',
   'browser_scroll',
   'browser_navigate',
   'browser_back',
@@ -1021,7 +1023,7 @@ function validateFrameTarget(call: ToolCall, frames: TabFrame[]): ToolAnswer | u
 }
 
 function validateElementTarget(call: ToolCall, tabId: number, frames: TabFrame[]): ToolAnswer | undefined {
-  if (call.name !== 'browser_click' && call.name !== 'browser_type') return undefined
+  if (call.name !== 'browser_click' && call.name !== 'browser_type' && call.name !== 'browser_upload') return undefined
   const frameId = requestedFrame(call.args)
   const frame = frames.find((candidate) => candidate.frameId === frameId)
   const snapshotted = snapshotDocumentsByTab.get(tabId)?.get(frameId)
