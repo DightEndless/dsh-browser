@@ -357,11 +357,42 @@ async function dispatchTabNativeTool(
 }
 
 /**
+ * Give the compositor one frame to present a tab that was just brought forward.
+ * `captureVisibleTab` photographs whatever is painted, so shooting immediately
+ * after `tabs.update` can still catch the previous tab.
+ */
+async function settleAfterActivation(): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, 120))
+}
+
+function viewportScreenshotAnswer(base64: string, format: string, note: string): ToolAnswer {
+  if (base64 === '') return unavailable('The browser returned an empty screenshot.')
+  // `format` arrives as the bare subtype ('jpeg' / 'png'): the data URL's own
+  // `image/...` prefix is stripped before it reaches here.
+  const bare = format.replace(/^image\//, '')
+  return {
+    ok: true,
+    result: {
+      text: `Captured the visible area of the controlled tab${note} as image/${bare}.`,
+      screenshot: { mime: `image/${bare}`, base64 },
+    },
+  }
+}
+
+/**
  * Capture the visible area of one tab and hand the pixels back to the bridge.
  *
  * `captureVisibleTab` always photographs the active tab of a window, so a
  * background target is brought to the front first — otherwise the model would
  * receive a picture of whatever the user happened to be looking at instead.
+ *
+ * That call also needs the extension to hold `<all_urls>` or `activeTab` for the
+ * photographed tab, which is exactly the permission a hosted build can withhold
+ * from the user's site-access choice; when it is, the call fails with "Either the
+ * '<all_urls>' or 'activeTab' permission is required" and the tool used to end
+ * there, even though the `debugger` permission was granted and the renderer could
+ * have produced the same viewport. The protocol is therefore the fallback, and it
+ * needs no activation at all: its pixels come from the renderer.
  */
 async function dispatchScreenshot(
   tabId: number,
@@ -380,7 +411,7 @@ async function dispatchScreenshot(
       await chrome.tabs.update(tabId, { active: true })
       activated = true
       // Give the compositor one frame to present the newly activated tab.
-      await new Promise((resolve) => setTimeout(resolve, 120))
+      await settleAfterActivation()
     }
     if (isCancelled(call, signal)) return cancelled()
     const dataUrl = await chrome.tabs.captureVisibleTab(
@@ -389,20 +420,49 @@ async function dispatchScreenshot(
     )
     const match = /^data:([^;,]+);base64,(.*)$/s.exec(dataUrl)
     if (match === null) return unavailable('The browser returned a screenshot in an unexpected format.')
-    const mime = match[1] ?? `image/${format}`
-    const base64 = match[2] ?? ''
-    if (base64 === '') return unavailable('The browser returned an empty screenshot.')
-    return {
-      ok: true,
-      result: {
-        text: `Captured the visible area of the controlled tab${activated ? ' (the tab was brought to the front first)' : ''} as ${mime}.`,
-        screenshot: { mime, base64 },
-      },
-    }
+    const note = activated ? ' (the tab was brought to the front first)' : ''
+    return viewportScreenshotAnswer(match[2] ?? '', match[1] ?? format, note)
   } catch (error: unknown) {
     const detail = error instanceof Error ? error.message : String(error)
-    return unavailable(`The screenshot could not be taken: ${detail}`)
+    return await captureViewportThroughDebugger(tabId, format, quality, detail)
   }
+}
+
+/**
+ * Fallback viewport capture, used when `captureVisibleTab` is refused or fails.
+ * It waits one frame first so a tab that was just activated has presented, then
+ * shoots through the protocol.
+ */
+async function captureViewportThroughDebugger(
+  tabId: number,
+  format: string,
+  quality: number,
+  captureDetail: string,
+): Promise<ToolAnswer> {
+  return await runWithDebugger(tabId, async (target) => {
+    try {
+      await settleAfterActivation()
+      const answer = await chrome.debugger.sendCommand(target, 'Page.captureScreenshot', {
+        format,
+        ...format === 'jpeg' ? { quality } : {},
+        fromSurface: true,
+      }) as { data?: string }
+      const base64 = typeof answer?.data === 'string' ? answer.data : ''
+      if (base64 === '') {
+        return unavailable(`The screenshot could not be taken: ${captureDetail}`)
+      }
+      return viewportScreenshotAnswer(
+        base64,
+        format,
+        ` (captured through the debugger, because captureVisibleTab was refused: ${captureDetail})`,
+      )
+    } catch (error: unknown) {
+      const fallbackDetail = error instanceof Error ? error.message : String(error)
+      return unavailable(
+        `The screenshot could not be taken: ${captureDetail} (the debugger fallback failed too: ${fallbackDetail})`,
+      )
+    }
+  })
 }
 
 /** Ceiling on a full-page capture, so a very long page cannot produce a huge image. */
