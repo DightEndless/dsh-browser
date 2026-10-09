@@ -344,6 +344,56 @@ describe('dispatchToolCall', () => {
     expect(chromeMock.query).not.toHaveBeenCalled()
   })
 
+  it('refuses a second call while one is already running on the same tab', async () => {
+    let release: (() => void) | undefined
+    const gate = new Promise<void>((resolve) => { release = resolve })
+    mockChrome({
+      tab: { id: 7, url: 'https://example.com' },
+      respond: async () => {
+        await gate
+        return OK
+      },
+    })
+
+    const first = dispatchToolCall(CALL, 'auto')
+    // Real timers, not fake ones: the first call has to get past its tab lookup
+    // and frame list before it takes the per-tab lock and blocks on the content
+    // script. A short real delay is steadier than counting microtasks here.
+    await new Promise((resolve) => setTimeout(resolve, 50))
+
+    await expect(dispatchToolCall(CALL, 'auto')).resolves.toMatchObject({
+      ok: false,
+      error: { message: expect.stringContaining('already running') },
+    })
+
+    release?.()
+    await expect(first).resolves.toMatchObject({ ok: true })
+  })
+
+  it('releases the per-tab lock once a call finishes', async () => {
+    // Two responses: the mock hands one out per call.
+    mockChrome({ tab: { id: 7, url: 'https://example.com' }, responses: [OK, OK] })
+
+    await expect(dispatchToolCall(CALL, 'auto')).resolves.toMatchObject({ ok: true })
+    await expect(dispatchToolCall(CALL, 'auto')).resolves.toMatchObject({ ok: true })
+  })
+
+  it('reports a frozen tab instead of hanging until the bridge timeout', { timeout: 15_000 }, async () => {
+    mockChrome({
+      tab: { id: 7, url: 'https://example.com' },
+      // The content script accepts the message and never answers — which is what
+      // a frozen or discarded tab looks like from this side.
+      respond: () => new Promise(() => {}),
+    })
+
+    const answer = await dispatchToolCall({ ...CALL, expiresAt: Date.now() + 6_000 }, 'auto')
+
+    expect(answer).toMatchObject({
+      ok: false,
+      error: { message: expect.stringContaining('did not answer within') },
+    })
+  })
+
   it('dispatches to an explicitly bound background tab without querying the active tab', async () => {
     const chromeMock = mockChrome({
       tab: { id: 7, url: 'https://active.example/' },
