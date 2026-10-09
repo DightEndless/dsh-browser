@@ -26,12 +26,6 @@ function markReady(): void {
 markReady()
 document.addEventListener('DOMContentLoaded', markReady, { once: true })
 
-// 视频学习页偶尔用原生确认框问"是否继续观看"。原生对话框内容脚本点不到，
-// 只在培训页把它们变成默认同意。
-  window.confirm = () => true
-  window.alert = () => undefined
-}
-
 window.addEventListener('message', (event: MessageEvent) => {
   if (event.source !== window) return
   const data = event.data as { channel?: unknown; token?: unknown } | null

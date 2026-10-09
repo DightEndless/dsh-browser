@@ -34,6 +34,15 @@ describe('Firefox build contract', () => {
     expect(firefoxManifest.content_security_policy.extension_pages).toContain('https://raw.githubusercontent.com')
   })
 
+  it('ships the main-world companion that javascript: links need', async () => {
+    const manifest = await readJson<{ content_scripts?: Array<{ js?: string[]; run_at?: string; world?: string }> }>('../manifest.firefox.json')
+
+    const mainWorld = manifest.content_scripts?.find((entry) => entry.js?.includes('main-world.js'))
+    expect(mainWorld).toBeDefined()
+    expect(mainWorld?.world).toBe('MAIN')
+    expect(mainWorld?.run_at).toBe('document_start')
+  })
+
   it('uses a Firefox event page, sidebar, and AMO data-transmission declaration', async () => {
     const manifest = await readJson<ExtensionManifest>('../manifest.firefox.json')
 
