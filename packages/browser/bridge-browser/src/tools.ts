@@ -63,10 +63,13 @@ export const BROWSER_TOOL_NAMES = [
   'browser_snapshot',
   'browser_click',
   'browser_click_at',
+  'browser_hover',
+  'browser_drag',
   'browser_type',
   'browser_press',
   'browser_upload',
   'browser_eval',
+  'browser_batch',
   'browser_scroll',
   'browser_navigate',
   'browser_open_tab',
@@ -258,6 +261,11 @@ function withTargetHint(description: string): string {
   return `${description}${TARGET_HINT}`
 }
 
+/** Drop the parameters the model left out, so the wire carries only real intent. */
+function withoutUndefined(values: Record<string, unknown>): Record<string, unknown> {
+  return Object.fromEntries(Object.entries(values).filter(([, value]) => value !== undefined))
+}
+
 /** The v1 tool set, model-perspective contracts only (no transport vocabulary). */
 function defineTools(call: BrowserTargetCall, options: BrowserToolsOptions): ToolDefinition[] {
   const snapshot = (): ToolDefinition => defineTool({
@@ -300,6 +308,61 @@ function defineTools(call: BrowserTargetCall, options: BrowserToolsOptions): Too
     timeoutMs: options.toolTimeoutMs,
     output: TEXT_OUTPUT,
     execute: (args, exec) => call(exec, 'browser_click_at', args as Record<string, unknown>),
+  })
+
+  const hover = (): ToolDefinition => defineTool({
+    name: 'browser_hover',
+    description: withTargetHint('Rest the pointer on an element from the latest browser_snapshot, or on an x/y viewport point, so hover-only menus, tooltips, and previews open. Take a snapshot afterwards to read what appeared.'),
+    parameters: {
+      index: { type: 'number', description: 'Element index from the browser_snapshot inventory.' },
+      x: { type: 'number', description: 'Horizontal viewport fraction 0-1, used when index is omitted.' },
+      y: { type: 'number', description: 'Vertical viewport fraction 0-1, used when index is omitted.' },
+    },
+    timeoutMs: options.toolTimeoutMs,
+    output: TEXT_OUTPUT,
+    execute: (args, exec) => call(exec, 'browser_hover', withoutUndefined(args as Record<string, unknown>)),
+  })
+
+  const drag = (): ToolDefinition => defineTool({
+    name: 'browser_drag',
+    description: withTargetHint('Drag from one target to another with a real press, move, and release, for sliders, sortable lists, and canvas handles. Address each end by element index or by x/y viewport fractions 0-1.'),
+    parameters: {
+      fromIndex: { type: 'number', description: 'Element index to press.' },
+      fromX: { type: 'number', description: 'Horizontal viewport fraction 0-1 to press, used when fromIndex is omitted.' },
+      fromY: { type: 'number', description: 'Vertical viewport fraction 0-1 to press, used when fromIndex is omitted.' },
+      toIndex: { type: 'number', description: 'Element index to release on.' },
+      toX: { type: 'number', description: 'Horizontal viewport fraction 0-1 to release on, used when toIndex is omitted.' },
+      toY: { type: 'number', description: 'Vertical viewport fraction 0-1 to release on, used when toIndex is omitted.' },
+      steps: { type: 'number', description: 'Points along the move path. Defaults to 12; more is smoother and slower.' },
+    },
+    timeoutMs: options.toolTimeoutMs,
+    output: TEXT_OUTPUT,
+    execute: (args, exec) => call(exec, 'browser_drag', withoutUndefined(args as Record<string, unknown>)),
+  })
+
+  const batch = (): ToolDefinition => defineTool({
+    name: 'browser_batch',
+    description: withTargetHint('Run page actions in sequence within one call, so an already-known short sequence costs one round trip instead of one per step. Take a snapshot instead when you need to see the page between steps.'),
+    parameters: {
+      actions: {
+        type: 'array',
+        required: true,
+        description: 'Steps to run in order.',
+        items: {
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            tool: { type: 'string', required: true, description: 'One of browser_click, browser_click_at, browser_hover, browser_drag, browser_type, browser_press, browser_upload, browser_scroll, browser_wait, browser_eval.' },
+            args: { type: 'object', additionalProperties: true, description: 'The arguments that tool takes on its own.' },
+          },
+        },
+      },
+      stopOnError: { type: 'boolean', description: 'Stop at the first failed step. Defaults to true.' },
+      snapshot: { type: 'boolean', description: 'Append the page state after the last step, saving a separate browser_snapshot call.' },
+    },
+    timeoutMs: options.toolTimeoutMs,
+    output: TEXT_OUTPUT,
+    execute: (args, exec) => call(exec, 'browser_batch', withoutUndefined(args as Record<string, unknown>)),
   })
 
   const type = (): ToolDefinition => defineTool({
@@ -499,19 +562,21 @@ function defineTools(call: BrowserTargetCall, options: BrowserToolsOptions): Too
 
   const screenshot = (): ToolDefinition => defineTool({
     name: 'browser_screenshot',
-    description: withTargetHint(`Capture the visible area of the controlled tab as an image and save it to a local file; read that path with read_image to see it. Use it for visual content (captcha, chart, layout) or for pictures browser_images cannot reach (inline data:, CSS backgrounds, login-gated). ${UNTRUSTED_CONTENT_WARNING}`),
+    description: withTargetHint(`Capture the controlled tab as an image and save it to a local file; read that path with read_image to see it. Use it for visual content (captcha, chart, layout) or pictures browser_images cannot reach. Set fullPage to get the whole scrollable page in one image. ${UNTRUSTED_CONTENT_WARNING}`),
     parameters: {
       format: { type: 'string', enum: ['jpeg', 'png'], description: 'Defaults to jpeg, which is much smaller.' },
       quality: { type: 'number', description: 'JPEG quality 1-100. Defaults to 85.' },
+      fullPage: { type: 'boolean', description: 'Capture the entire scrollable page instead of just the visible area.' },
     },
     timeoutMs: options.toolTimeoutMs,
     output: TEXT_OUTPUT,
     execute: (args, exec) => {
-      const a = args as { format?: 'jpeg' | 'png'; quality?: number }
-      return call(exec, 'browser_screenshot', {
-        ...a.format !== undefined ? { format: a.format } : {},
-        ...a.quality !== undefined ? { quality: a.quality } : {},
-      })
+      const a = args as { format?: 'jpeg' | 'png'; quality?: number; fullPage?: boolean }
+      return call(exec, 'browser_screenshot', withoutUndefined({
+        format: a.format,
+        quality: a.quality,
+        fullPage: a.fullPage,
+      }))
     },
   })
 
@@ -560,10 +625,13 @@ function defineTools(call: BrowserTargetCall, options: BrowserToolsOptions): Too
     snapshot(),
     click(),
     clickAt(),
+    hover(),
+    drag(),
     type(),
     press(),
     upload(),
     evaluate(),
+    batch(),
     scroll(),
     navigate(),
     openTab(),

@@ -163,6 +163,58 @@ describe('registerBrowserTools', () => {
     expect(requestTool).toHaveBeenLastCalledWith('browser_wait', { frame: 4 }, exec.signal, { timeoutMs: 1_000 })
   })
 
+  it('forwards the interaction tools with only the arguments that were given', async () => {
+    const { ctx, bridge, requestTool, registered } = makeHarness()
+    registerBrowserTools(ctx, bridge, { toolTimeoutMs: 1_000, snapshotMaxChars: 12_000, maxInteractiveItems: 60 })
+    const byName = new Map(registered.map((r) => [r.name, r.definition]))
+    const exec = { signal: new AbortController().signal }
+    const run = async (name: string, args: unknown): Promise<void> => {
+      await (byName.get(name)!.execute as (a: unknown, e: { signal: AbortSignal }) => Promise<unknown>)(args, exec)
+    }
+
+    await run('browser_hover', { index: 6 })
+    expect(requestTool).toHaveBeenLastCalledWith('browser_hover', { index: 6 }, exec.signal, { timeoutMs: 1_000 })
+    await run('browser_hover', { x: 0.2, y: 0.9 })
+    expect(requestTool).toHaveBeenLastCalledWith('browser_hover', { x: 0.2, y: 0.9 }, exec.signal, { timeoutMs: 1_000 })
+
+    await run('browser_drag', { fromIndex: 1, toX: 0.8, toY: 0.2 })
+    expect(requestTool).toHaveBeenLastCalledWith(
+      'browser_drag',
+      { fromIndex: 1, toX: 0.8, toY: 0.2 },
+      exec.signal,
+      { timeoutMs: 1_000 },
+    )
+
+    const actions = [{ tool: 'browser_click', args: { index: 2 } }]
+    await run('browser_batch', { actions, stopOnError: false, snapshot: true })
+    expect(requestTool).toHaveBeenLastCalledWith(
+      'browser_batch',
+      { actions, stopOnError: false, snapshot: true },
+      exec.signal,
+      { timeoutMs: 1_000 },
+    )
+    // Absent flags stay absent: the extension applies its own defaults.
+    await run('browser_batch', { actions })
+    expect(requestTool).toHaveBeenLastCalledWith('browser_batch', { actions }, exec.signal, { timeoutMs: 1_000 })
+
+    await run('browser_screenshot', { fullPage: true })
+    expect(requestTool).toHaveBeenLastCalledWith('browser_screenshot', { fullPage: true }, exec.signal, { timeoutMs: 1_000 })
+    await run('browser_screenshot', {})
+    expect(requestTool).toHaveBeenLastCalledWith('browser_screenshot', {}, exec.signal, { timeoutMs: 1_000 })
+  })
+
+  it('accepts an array of steps for browser_batch', () => {
+    const { ctx, bridge, registered } = makeHarness()
+    registerBrowserTools(ctx, bridge, { toolTimeoutMs: 1_000, snapshotMaxChars: 12_000, maxInteractiveItems: 60 })
+    const batch = registered.find(({ name }) => name === 'browser_batch')!.definition.parameters as {
+      properties: { actions?: { type?: unknown; items?: { type?: unknown } } }
+      required?: string[]
+    }
+    expect(batch.properties.actions?.type).toBe('array')
+    expect(batch.properties.actions?.items?.type).toBe('object')
+    expect(batch.required).toContain('actions')
+  })
+
   it('normalizes every DSH parameter map to JSON Schema before registration', () => {
     const { ctx, bridge, registered } = makeHarness()
     registerBrowserTools(ctx, bridge, { toolTimeoutMs: 1_000, snapshotMaxChars: 12_000, maxInteractiveItems: 60 })
@@ -234,10 +286,10 @@ describe('registerBrowserTools', () => {
     const descriptionChars = registered.reduce((sum, { definition }) => sum + String(definition.description).length, 0)
     // Raised from 1500 when multi-browser routing added browser_use plus the
     // per-tool routing hint, and again as the tool set itself grew (screenshot,
-    // upload, eval, point clicks, condition arguments on wait). The budget still
-    // guards against bloat: it tracks how many tools there are, not the size of
-    // any one description.
-    expect(descriptionChars).toBeLessThan(3_600)
+    // upload, eval, point clicks, condition arguments on wait, hover, drag, and
+    // batch). The budget still guards against bloat: it tracks how many tools
+    // there are, not the size of any one description.
+    expect(descriptionChars).toBeLessThan(4_200)
   })
 
   it('writes a returned screenshot to a file and hands the model its path', async () => {

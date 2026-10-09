@@ -102,6 +102,39 @@ const PAGE_CONTENT_TOOL_NAMES = new Set([
   // behind the same switch.
   'browser_eval',
 ])
+/**
+ * Tools that can address a page element by its snapshot index, and therefore
+ * only work against the document that was snapshotted.
+ */
+const INDEX_ADDRESSED_TOOLS = new Set([
+  'browser_click',
+  'browser_type',
+  'browser_upload',
+  'browser_hover',
+  'browser_drag',
+])
+/**
+ * Tools `browser_batch` may chain.
+ *
+ * Tab-collection tools and navigation are excluded because a batch drives one
+ * page, and page-content readers are excluded because a batch exists to perform
+ * a sequence of actions in one round trip rather than to pull a whole page back
+ * on every step.
+ */
+const BATCH_ALLOWED_TOOLS = new Set([
+  'browser_click',
+  'browser_click_at',
+  'browser_hover',
+  'browser_drag',
+  'browser_type',
+  'browser_press',
+  'browser_upload',
+  'browser_scroll',
+  'browser_wait',
+  'browser_eval',
+])
+/** Upper bound on one batch, so a runaway list cannot hold a tab for minutes. */
+const BATCH_MAX_ACTIONS = 20
 const NAVIGATION_SNAPSHOT_GUIDANCE = 'Navigation completed and the current page snapshot is included below. Use it directly instead of taking an immediate duplicate snapshot.'
 const pendingInjections = new Map<number, Promise<void>>()
 const snapshotDocumentsByTab = new Map<number, Map<number, string>>()
@@ -125,6 +158,15 @@ export function isTabManagementTool(name: string): boolean {
 export interface TabManagementContext {
   /** Skip all browser approval prompts after the user enables unrestricted access. */
   unrestrictedAccess: boolean
+  /**
+   * The caller already obtained one approval that names every step of this
+   * operation, so the inner dispatch must not prompt again. Only
+   * `browser_batch` sets this, and only after its own prompt listed the steps.
+   * The page-content privacy gate is independent of it and still applies.
+   */
+  preAuthorized?: boolean
+  /** Hide per-step page deltas so one batch does not return the page N times. */
+  suppressActionDelta?: boolean
   /** Controlled tab for the calling session, when one still exists. */
   controlledTabId?: number
   /** Rebind subsequent tools to one existing tab without activating it. */
@@ -361,6 +403,63 @@ async function dispatchScreenshot(
   }
 }
 
+/** Ceiling on a full-page capture, so a very long page cannot produce a huge image. */
+const FULL_PAGE_MAX_CSS_PIXELS = 16_000
+
+/**
+ * Capture the whole scrollable page through the DevTools protocol.
+ *
+ * `captureVisibleTab` only ever sees the viewport, which forces several
+ * scroll-then-shoot round trips on a long page. The protocol composes the entire
+ * document instead, and because the pixels come from the renderer rather than
+ * from the window it also needs no tab activation, so the user is not yanked
+ * away from whatever they were reading.
+ */
+async function dispatchFullPageScreenshot(tabId: number, call: ToolCall, signal?: AbortSignal): Promise<ToolAnswer> {
+  if (isCancelled(call, signal)) return cancelled()
+  const format = call.args.format === 'png' ? 'png' : 'jpeg'
+  const requestedQuality = typeof call.args.quality === 'number' ? call.args.quality : 85
+  const quality = Math.min(100, Math.max(1, Math.round(requestedQuality)))
+  return await runWithDebugger(tabId, async (target) => {
+    if (isCancelled(call, signal)) return cancelled()
+    try {
+      const metrics = await chrome.debugger.sendCommand(target, 'Page.getLayoutMetrics') as {
+        cssContentSize?: { width?: number; height?: number }
+        contentSize?: { width?: number; height?: number }
+      }
+      const size = metrics?.cssContentSize ?? metrics?.contentSize
+      const width = Math.ceil(size?.width ?? 0)
+      const height = Math.ceil(size?.height ?? 0)
+      if (width <= 0 || height <= 0) {
+        return unavailable('The browser could not measure the page, so a full-page capture is not possible.')
+      }
+      const clipped = height > FULL_PAGE_MAX_CSS_PIXELS
+      const captureHeight = clipped ? FULL_PAGE_MAX_CSS_PIXELS : height
+      const answer = await chrome.debugger.sendCommand(target, 'Page.captureScreenshot', {
+        format,
+        ...format === 'jpeg' ? { quality } : {},
+        captureBeyondViewport: true,
+        clip: { x: 0, y: 0, width, height: captureHeight, scale: 1 },
+      }) as { data?: string }
+      const base64 = typeof answer?.data === 'string' ? answer.data : ''
+      if (base64 === '') return unavailable('The browser returned an empty full-page capture.')
+      const note = clipped
+        ? ` It stops at ${FULL_PAGE_MAX_CSS_PIXELS}px of the page's ${height}px; scroll down and capture the rest if you need it.`
+        : ''
+      return {
+        ok: true,
+        result: {
+          text: `Captured the whole page (${width}×${captureHeight} CSS pixels) as image/${format}.${note}`,
+          screenshot: { mime: `image/${format}`, base64 },
+        },
+      }
+    } catch (error: unknown) {
+      const detail = error instanceof Error ? error.message : String(error)
+      return unavailable(`The full-page screenshot could not be taken: ${detail}`)
+    }
+  })
+}
+
 /** How long one expression may run before the debugger gives up on it. */
 const EVAL_TIMEOUT_MS = 10_000
 
@@ -438,6 +537,10 @@ async function dispatchEval(tabId: number, call: ToolCall, signal?: AbortSignal)
         returnByValue: true,
         awaitPromise: true,
         timeout: EVAL_TIMEOUT_MS,
+        // Clipboard writes, fullscreen requests, and media playback are gated on
+        // transient user activation, which a bare evaluate never carries. The
+        // flag is what lets an expression do what a click could have done.
+        userGesture: true,
       }) as {
         result?: RemoteValue
         exceptionDetails?: { text?: string; exception?: { description?: string } }
@@ -456,29 +559,58 @@ async function dispatchEval(tabId: number, call: ToolCall, signal?: AbortSignal)
   })
 }
 
+/** One resolved viewport point in CSS pixels, with the viewport that produced it. */
+interface ViewportPoint {
+  x: number
+  y: number
+  width: number
+  height: number
+  /** How the caller addressed the point, for the result message. */
+  label: string
+}
+
 /**
- * Click one viewport point with real mouse input.
+ * Turn either a snapshot index or a pair of viewport fractions into pixels.
  *
- * Event dispatch from the isolated world is not trusted input, so pages that gate
- * on `isTrusted` — and any target that has no element to address, such as a spot
- * inside an image — need the debugger instead. Callers give viewport fractions
- * rather than pixels, because that is how a screenshot maps back onto the page
- * regardless of device pixel ratio.
+ * Both forms resolve to a point in the top-level viewport, which is the only
+ * coordinate space the DevTools protocol's mouse input understands. The element
+ * lookup rides `data-dsh-el` — the same observable numbering the snapshot writes
+ * onto inventoried elements — so resolving an index costs one injected script
+ * and no content-script round trip.
  */
-async function dispatchClickAt(tabId: number, call: ToolCall, signal?: AbortSignal): Promise<ToolAnswer> {
-  if (isCancelled(call, signal)) return cancelled()
-  const x = typeof call.args.x === 'number' ? call.args.x : Number.NaN
-  const y = typeof call.args.y === 'number' ? call.args.y : Number.NaN
-  if (!Number.isFinite(x) || !Number.isFinite(y) || x < 0 || x > 1 || y < 0 || y > 1) {
-    return unavailable('x and y must be viewport fractions between 0 and 1, with (0, 0) at the top left.')
+async function resolvePoint(
+  tabId: number,
+  args: { index?: unknown; x?: unknown; y?: unknown },
+): Promise<ViewportPoint | ToolAnswer> {
+  const index = typeof args.index === 'number' && Number.isSafeInteger(args.index) && args.index >= 1
+    ? args.index
+    : undefined
+  const fractionX = typeof args.x === 'number' ? args.x : undefined
+  const fractionY = typeof args.y === 'number' ? args.y : undefined
+  if (index === undefined) {
+    const usable = fractionX !== undefined && fractionY !== undefined
+      && Number.isFinite(fractionX) && Number.isFinite(fractionY)
+      && fractionX >= 0 && fractionX <= 1 && fractionY >= 0 && fractionY <= 1
+    if (!usable) {
+      return unavailable('Give either index (an element number from browser_snapshot) or x and y as viewport fractions between 0 and 1, with (0, 0) at the top left.')
+    }
   }
-  let measured: { width?: number; height?: number } | undefined
+  let measured: { width?: number; height?: number; centerX?: number; centerY?: number; missing?: boolean } | undefined
   try {
     const [injected] = await chrome.scripting.executeScript({
       target: { tabId },
-      func: () => ({ width: window.innerWidth, height: window.innerHeight }),
+      func: (wanted: number | null) => {
+        const width = window.innerWidth
+        const height = window.innerHeight
+        if (wanted === null) return { width, height }
+        const element = document.querySelector(`[data-dsh-el="${wanted}"]`)
+        if (element === null) return { width, height, missing: true }
+        const rect = element.getBoundingClientRect()
+        return { width, height, centerX: rect.left + rect.width / 2, centerY: rect.top + rect.height / 2 }
+      },
+      args: [index ?? null],
     })
-    measured = injected?.result as { width?: number; height?: number } | undefined
+    measured = injected?.result as typeof measured
   } catch {
     measured = undefined
   }
@@ -487,36 +619,255 @@ async function dispatchClickAt(tabId: number, call: ToolCall, signal?: AbortSign
   if (width <= 0 || height <= 0) {
     return unavailable('Could not measure the viewport of this tab, so the point cannot be placed.')
   }
-  const point = { x: Math.round(x * width), y: Math.round(y * height) }
-  return await runWithDebugger(tabId, async (target) => {
-    try {
-      await chrome.debugger.sendCommand(target, 'Input.dispatchMouseEvent', {
-        type: 'mousePressed',
-        x: point.x,
-        y: point.y,
-        button: 'left',
-        buttons: 1,
-        clickCount: 1,
-      })
-      await chrome.debugger.sendCommand(target, 'Input.dispatchMouseEvent', {
-        type: 'mouseReleased',
-        x: point.x,
-        y: point.y,
-        button: 'left',
-        buttons: 0,
-        clickCount: 1,
-      })
-    } catch (error: unknown) {
-      const detail = error instanceof Error ? error.message : String(error)
-      return unavailable(`The click could not be delivered: ${detail}`)
+  if (index === undefined) {
+    const px = Math.round((fractionX as number) * width)
+    const py = Math.round((fractionY as number) * height)
+    return {
+      x: px,
+      y: py,
+      width,
+      height,
+      label: `${Math.round((fractionX as number) * 100)}% across and ${Math.round((fractionY as number) * 100)}% down the viewport (${px}, ${py})`,
     }
+  }
+  if (measured?.missing === true) {
+    return unavailable(`Element [${index}] is no longer on the page. Call browser_snapshot again for current index values.`)
+  }
+  const centerX = measured?.centerX
+  const centerY = measured?.centerY
+  if (typeof centerX !== 'number' || typeof centerY !== 'number') {
+    return unavailable(`Element [${index}] could not be measured. Call browser_snapshot again.`)
+  }
+  const px = Math.round(centerX)
+  const py = Math.round(centerY)
+  if (px < 0 || py < 0 || px > width || py > height) {
+    return unavailable(`Element [${index}] sits at (${px}, ${py}), outside the ${width}×${height} viewport. Scroll it into view with browser_scroll, then retry.`)
+  }
+  return { x: px, y: py, width, height, label: `the centre of element [${index}] (${px}, ${py})` }
+}
+
+/** Deliver one protocol mouse event, returning a failure message when it did not land. */
+async function sendMouse(
+  target: chrome.debugger.Debuggee,
+  event: Record<string, unknown>,
+): Promise<string | undefined> {
+  try {
+    await chrome.debugger.sendCommand(target, 'Input.dispatchMouseEvent', event)
+    return undefined
+  } catch (error: unknown) {
+    return error instanceof Error ? error.message : String(error)
+  }
+}
+
+/** Let the page react to input that was just delivered. */
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+/**
+ * Click one viewport point or element centre with real mouse input.
+ *
+ * Event dispatch from the isolated world is not trusted input, so pages that gate
+ * on `isTrusted` — and any target that has no element to address, such as a spot
+ * inside an image — need the debugger instead.
+ */
+async function dispatchClickAt(tabId: number, call: ToolCall, signal?: AbortSignal): Promise<ToolAnswer> {
+  if (isCancelled(call, signal)) return cancelled()
+  const point = await resolvePoint(tabId, call.args)
+  if (isToolAnswer(point)) return point
+  if (isCancelled(call, signal)) return cancelled()
+  return await runWithDebugger(tabId, async (target) => {
+    const press = await sendMouse(target, { type: 'mousePressed', x: point.x, y: point.y, button: 'left', buttons: 1, clickCount: 1 })
+    if (press !== undefined) return unavailable(`The click could not be delivered: ${press}`)
+    const release = await sendMouse(target, { type: 'mouseReleased', x: point.x, y: point.y, button: 'left', buttons: 0, clickCount: 1 })
+    if (release !== undefined) return unavailable(`The click could not be delivered: ${release}`)
+    return {
+      ok: true,
+      result: { text: `Clicked ${point.label} of ${point.width}×${point.height}.` },
+    }
+  })
+}
+
+/** How long a hover rests before answering, so the page can reveal what it hides. */
+const HOVER_SETTLE_MS = 400
+/** Places the drag path visits between press and release. */
+const DRAG_STEPS = 12
+
+/**
+ * Rest the pointer on a target with real mouse input.
+ *
+ * Hover-only menus are unreachable from script: they open in response to a
+ * trusted `mouseover`, so synthetic events from the isolated world are ignored.
+ * A protocol `mouseMoved` is trusted, and the move is sent twice because menus
+ * that already saw a pointer enter sometimes wait for it to actually move.
+ */
+async function dispatchHover(tabId: number, call: ToolCall, signal?: AbortSignal): Promise<ToolAnswer> {
+  if (isCancelled(call, signal)) return cancelled()
+  const point = await resolvePoint(tabId, call.args)
+  if (isToolAnswer(point)) return point
+  if (isCancelled(call, signal)) return cancelled()
+  return await runWithDebugger(tabId, async (target) => {
+    const move = { type: 'mouseMoved', x: point.x, y: point.y, button: 'none', buttons: 0 }
+    const first = await sendMouse(target, move)
+    if (first !== undefined) return unavailable(`The hover could not be delivered: ${first}`)
+    await sendMouse(target, move)
+    await sleep(HOVER_SETTLE_MS)
     return {
       ok: true,
       result: {
-        text: `Clicked ${Math.round(x * 100)}% across and ${Math.round(y * 100)}% down the viewport (${point.x}, ${point.y} of ${width}×${height}).`,
+        text: `Rested the pointer on ${point.label} and waited ${HOVER_SETTLE_MS}ms. Whatever the page reveals on hover should be on screen now; call browser_snapshot to read it, or browser_wait if it is still loading.`,
       },
     }
   })
+}
+
+/**
+ * Drag from one target to another with a real press, move path, and release.
+ *
+ * Sliders, sortable lists, canvas handles, and map panes read a continuous
+ * pointer, so jumping straight from press to release is not enough — the page
+ * would see the pointer teleport, if it saw a move at all. Interpolating the
+ * path is what makes the gesture look like a hand to the page.
+ */
+async function dispatchDrag(tabId: number, call: ToolCall, signal?: AbortSignal): Promise<ToolAnswer> {
+  if (isCancelled(call, signal)) return cancelled()
+  const from = await resolvePoint(tabId, { index: call.args.fromIndex, x: call.args.fromX, y: call.args.fromY })
+  if (isToolAnswer(from)) return from
+  const to = await resolvePoint(tabId, { index: call.args.toIndex, x: call.args.toX, y: call.args.toY })
+  if (isToolAnswer(to)) return to
+  if (isCancelled(call, signal)) return cancelled()
+  const steps = typeof call.args.steps === 'number' && Number.isFinite(call.args.steps)
+    ? Math.min(60, Math.max(2, Math.round(call.args.steps)))
+    : DRAG_STEPS
+  return await runWithDebugger(tabId, async (target) => {
+    const entry = await sendMouse(target, { type: 'mouseMoved', x: from.x, y: from.y, button: 'none', buttons: 0 })
+    if (entry !== undefined) return unavailable(`The drag could not be started: ${entry}`)
+    const press = await sendMouse(target, { type: 'mousePressed', x: from.x, y: from.y, button: 'left', buttons: 1, clickCount: 1 })
+    if (press !== undefined) return unavailable(`The drag could not be started: ${press}`)
+    for (let step = 1; step <= steps; step += 1) {
+      const progress = step / steps
+      const x = Math.round(from.x + (to.x - from.x) * progress)
+      const y = Math.round(from.y + (to.y - from.y) * progress)
+      const moved = await sendMouse(target, { type: 'mouseMoved', x, y, button: 'left', buttons: 1 })
+      if (moved !== undefined) return unavailable(`The drag was interrupted while moving: ${moved}`)
+      if (isCancelled(call, signal)) return cancelled()
+    }
+    const release = await sendMouse(target, { type: 'mouseReleased', x: to.x, y: to.y, button: 'left', buttons: 0, clickCount: 1 })
+    if (release !== undefined) return unavailable(`The drag could not be released: ${release}`)
+    return {
+      ok: true,
+      result: {
+        text: `Dragged from ${from.label} to ${to.label} in ${steps} steps. Call browser_snapshot to see where things landed.`,
+      },
+    }
+  })
+}
+
+/** One step of a batch, after the raw `actions` array has been validated. */
+interface BatchStep {
+  tool: string
+  args: Record<string, unknown>
+}
+
+/** Validate the raw `actions` array of one browser_batch call. */
+function parseBatchSteps(raw: unknown): BatchStep[] | ToolAnswer {
+  if (!Array.isArray(raw) || raw.length === 0) {
+    return unavailable('browser_batch needs a non-empty actions array.')
+  }
+  if (raw.length > BATCH_MAX_ACTIONS) {
+    return unavailable(`browser_batch accepts at most ${BATCH_MAX_ACTIONS} actions, but ${raw.length} were given.`)
+  }
+  const steps: BatchStep[] = []
+  for (const [position, entry] of raw.entries()) {
+    if (typeof entry !== 'object' || entry === null) {
+      return unavailable(`Step ${position + 1} of the batch must be an object with a "tool" and an optional "args".`)
+    }
+    const tool = (entry as { tool?: unknown }).tool
+    const args = (entry as { args?: unknown }).args
+    if (typeof tool !== 'string' || tool === '') {
+      return unavailable(`Step ${position + 1} of the batch has no tool name.`)
+    }
+    if (!BATCH_ALLOWED_TOOLS.has(tool)) {
+      return unavailable(`browser_batch cannot run "${tool}" at step ${position + 1}. Allowed tools: ${[...BATCH_ALLOWED_TOOLS].join(', ')}.`)
+    }
+    if (args !== undefined && (typeof args !== 'object' || args === null)) {
+      return unavailable(`The args of step ${position + 1} must be an object.`)
+    }
+    steps.push({ tool, args: (args ?? {}) as Record<string, unknown> })
+  }
+  return steps
+}
+
+/**
+ * Run several actions against one page without a bridge round trip between them.
+ *
+ * The saving is in the round trips, not in the actions: every step is the same
+ * dispatch a standalone call would use, minus the per-step approval — the
+ * batch's own prompt listed the steps — and minus the per-step page delta, so
+ * the page comes back once at the end and only when the caller asked for it.
+ */
+async function dispatchBatch(
+  call: ToolCall,
+  tab: Pick<chrome.tabs.Tab, 'id' | 'url' | 'title'> & { windowId?: number },
+  sharePageContent: 'ask' | 'auto' | 'off',
+  budget: ContentBudget,
+  authorize: ((prompt: ApprovalPrompt) => Promise<ApprovalAuthorization>) | undefined,
+  signal: AbortSignal | undefined,
+  targetStillAllowed: (() => boolean) | undefined,
+  tabManagement: TabManagementContext,
+): Promise<ToolAnswer> {
+  if (tab.id === undefined) return unavailable('No active tab is available for browser operations.')
+  const tabId = tab.id
+  const parsed = parseBatchSteps(call.args.actions)
+  if (isToolAnswer(parsed)) return parsed
+  const stopOnError = call.args.stopOnError !== false
+  // Steps were named in the one prompt the caller already approved, and the
+  // privacy gate reads `unrestrictedAccess` rather than this flag, so turning
+  // prompts off here cannot widen what may leave the page.
+  const inner: TabManagementContext = { ...tabManagement, preAuthorized: true, suppressActionDelta: true }
+  const lines: string[] = []
+  let completed = 0
+  let failedAt: number | undefined
+  for (const [position, step] of parsed.entries()) {
+    if (isCancelled(call, signal)) return cancelled()
+    if (targetStillAllowed?.() === false) return targetChanged()
+    const answer = await dispatchToolCallUnlocked(
+      { ...call, name: step.tool, args: step.args },
+      sharePageContent,
+      budget,
+      authorize,
+      signal,
+      tab,
+      targetStillAllowed,
+      inner,
+    )
+    const number = position + 1
+    if (answer.ok) {
+      completed += 1
+      lines.push(`${number}. ${step.tool}: ${answerText(answer) ?? 'done'}`)
+      continue
+    }
+    failedAt = number
+    lines.push(`${number}. ${step.tool}: FAILED — ${answer.error?.message ?? 'unknown error'}`)
+    if (stopOnError) break
+  }
+  const headline = failedAt === undefined
+    ? `Ran ${completed} action${completed === 1 ? '' : 's'} in a row.`
+    : `Ran ${completed} of ${parsed.length} actions; step ${failedAt} failed${stopOnError ? ', so the later steps were skipped' : ''}.`
+  const parts = [headline, ...lines]
+  if (call.args.snapshot === true && failedAt === undefined) {
+    try {
+      const refreshed = await listTabFrames(tabId, tab.url)
+      const snapshot = await snapshotAllFrames(tabId, refreshed, { ...call, name: 'browser_snapshot', args: {} }, budget)
+      const text = answerText(snapshot)
+      if (text !== undefined) parts.push('', 'Page state after the batch:', text)
+    } catch {
+      parts.push('', 'The page could not be read back after the batch; call browser_snapshot.')
+    }
+  }
+  // The report itself was produced, so the call answers ok even when a step
+  // failed: the text carries the per-step outcome the model needs to react.
+  return { ok: true, result: { text: parts.join('\n') } }
 }
 
 function cancelled(): ToolAnswer {
@@ -1077,7 +1428,11 @@ async function dispatchToolCallUnlocked(
   }
   const targetError = validateElementTarget(call, tab.id, frames)
   if (targetError !== undefined) return targetError
-  const approval = tabManagement.unrestrictedAccess
+  // A batch reports its own steps and reads the page back once at the end, so
+  // its inner dispatches must not each carry a page delta.
+  const includeActionDelta = tabManagement.suppressActionDelta !== true
+    && (tabManagement.unrestrictedAccess || sharePageContent === 'auto')
+  const approval = tabManagement.unrestrictedAccess || tabManagement.preAuthorized === true
     ? undefined
     : approvalPromptForCall(call, sharePageContent, frames)
   if (approval !== undefined) {
@@ -1105,16 +1460,39 @@ async function dispatchToolCallUnlocked(
   // A screenshot is taken by the browser rather than by the page, so it never
   // goes through the content script and also works on protected pages.
   if (call.name === 'browser_screenshot') {
-    return await dispatchScreenshot(tab.id, tab.windowId, call, signal)
+    // The whole-page form composes the document in the renderer, which needs the
+    // debugger; the viewport form is a plain tab capture.
+    return call.args.fullPage === true
+      ? await dispatchFullPageScreenshot(tab.id, call, signal)
+      : await dispatchScreenshot(tab.id, tab.windowId, call, signal)
   }
   // Script execution rides the DevTools protocol, so it bypasses the page's own
   // CSP and the content script entirely.
   if (call.name === 'browser_eval') {
     return await dispatchEval(tab.id, call, signal)
   }
-  // A point click needs trusted input, which only the debugger can produce.
+  // Clicks at a point, hovers, and drags all need trusted input, which only the
+  // debugger can produce.
   if (call.name === 'browser_click_at') {
     return await dispatchClickAt(tab.id, call, signal)
+  }
+  if (call.name === 'browser_hover') {
+    return await dispatchHover(tab.id, call, signal)
+  }
+  if (call.name === 'browser_drag') {
+    return await dispatchDrag(tab.id, call, signal)
+  }
+  if (call.name === 'browser_batch') {
+    return await dispatchBatch(
+      call,
+      tab,
+      sharePageContent,
+      effectiveBudget,
+      authorize,
+      signal,
+      targetStillAllowed,
+      tabManagement,
+    )
   }
   if (!isInjectablePage(tab.url)) {
     return await dispatchTabNativeTool(tab.id, tab.url, tab.title, tab.windowId, call, effectiveBudget, signal, targetStillAllowed, tabManagement.commitAction)
@@ -1128,7 +1506,7 @@ async function dispatchToolCallUnlocked(
       effectiveBudget,
       signal,
       targetStillAllowed,
-      tabManagement.unrestrictedAccess || sharePageContent === 'auto',
+      includeActionDelta,
       tabManagement.commitAction,
       tabManagement.rollbackActionCommit,
     )
@@ -1172,7 +1550,7 @@ async function dispatchToolCallUnlocked(
         effectiveBudget,
         signal,
         targetStillAllowed,
-        tabManagement.unrestrictedAccess || sharePageContent === 'auto',
+        includeActionDelta,
         tabManagement.commitAction,
         tabManagement.rollbackActionCommit,
       )
@@ -1193,7 +1571,11 @@ function validateFrameTarget(call: ToolCall, frames: TabFrame[]): ToolAnswer | u
 }
 
 function validateElementTarget(call: ToolCall, tabId: number, frames: TabFrame[]): ToolAnswer | undefined {
-  if (call.name !== 'browser_click' && call.name !== 'browser_type' && call.name !== 'browser_upload') return undefined
+  if (!INDEX_ADDRESSED_TOOLS.has(call.name)) return undefined
+  // hover and drag also accept a bare viewport point, which has no inventory
+  // entry for this check to protect.
+  if (typeof call.args.index !== 'number'
+    && (call.name === 'browser_hover' || call.name === 'browser_drag')) return undefined
   const frameId = requestedFrame(call.args)
   const frame = frames.find((candidate) => candidate.frameId === frameId)
   const snapshotted = snapshotDocumentsByTab.get(tabId)?.get(frameId)

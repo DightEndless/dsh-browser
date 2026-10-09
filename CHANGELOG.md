@@ -10,6 +10,49 @@ change:
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Extension 0.3.0 / bridge package 0.2.0 — 2026-10-09
+
+### Added
+
+- **Whole-page screenshots.** `browser_screenshot` takes `fullPage: true` and
+  composes the entire scrollable document into one image through the DevTools
+  protocol, instead of forcing a scroll-then-shoot round trip per screenful. The
+  pixels come from the renderer rather than from the window, so this form also
+  needs no tab activation and does not pull the user away from what they were
+  reading. A capture stops at 16 000 CSS pixels of height and says so when it
+  does.
+- **`browser_hover`** rests the pointer on an element or a viewport point with a
+  protocol mouse move, so menus, tooltips, and previews that only appear on hover
+  actually appear. The move is sent twice, because some menus ignore the entry
+  event, and the call settles briefly before answering so the page has time to
+  react. Read the result with a following snapshot.
+- **`browser_drag`** presses, moves along an interpolated path, and releases —
+  the shape sliders, sortable lists, canvas handles, and map panes actually read.
+  Jumping straight from press to release would look like a teleport, if the page
+  saw a move at all. Each end is addressed by element index or viewport fractions.
+- **`browser_batch`** runs a list of page actions inside one call, so a sequence
+  that is already known costs one round trip instead of one per step. Steps run
+  in order and stop at the first failure unless `stopOnError: false`; the last
+  step can append the page state with `snapshot: true`. Tab-collection tools and
+  navigation are rejected inside a batch, which keeps one batch on one page.
+- **Point tools now take an element index.** `browser_click_at`, `browser_hover`,
+  and `browser_drag` resolve an index through the `data-dsh-el` numbering the
+  snapshot already writes onto inventoried elements, so a target no longer has to
+  be located by eye from a screenshot. An element that has left the page, or one
+  that sits outside the viewport, is reported instead of acted on.
+
+### Changed
+
+- **`browser_eval` runs with a user gesture.** Clipboard writes, fullscreen
+  requests, and media playback are gated on transient activation, which a bare
+  `Runtime.evaluate` never carries. The flag lets an expression do what a click
+  could have done.
+- **One approval covers a whole batch.** The batch's own prompt lists every step
+  it will run by reusing the per-tool summaries, and the inner dispatch does not
+  prompt again. The page-content privacy gate is a separate condition and still
+  applies to every step, so turning prompts off inside a batch cannot widen what
+  may leave the page.
+
 ## Extension 0.2.0 / bridge package 0.1.0 — 2026-10-09
 
 ### Added

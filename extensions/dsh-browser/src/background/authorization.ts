@@ -13,6 +13,9 @@ const STATE_CHANGING_ACTIONS = new Set([
   'browser_upload',
   'browser_eval',
   'browser_click_at',
+  'browser_hover',
+  'browser_drag',
+  'browser_batch',
   'browser_navigate',
   'browser_open_tab',
   'browser_back',
@@ -37,7 +40,7 @@ export function approvalPromptForCall(
     return {
       kind: 'read',
       action: call.name,
-      summary: readSummary(call.name, locale),
+      summary: readSummary(call, locale),
       origins: uniqueOrigins(targetFrames, frames),
       canTrust: false,
     }
@@ -110,15 +113,17 @@ export function originFromUrl(value: string): string | undefined {
 }
 
 /** Reader-facing purpose of one page-reading tool. */
-function readSummary(name: string, locale: UiLocale): string {
-  if (name === 'browser_get_text') {
+function readSummary(call: ToolCall, locale: UiLocale): string {
+  if (call.name === 'browser_get_text') {
     return localized(locale, 'Read text from the specified area of the current page', '读取当前页面的指定文本区域')
   }
-  if (name === 'browser_images') {
+  if (call.name === 'browser_images') {
     return localized(locale, 'Read image addresses from the current page', '读取当前页面的图片地址')
   }
-  if (name === 'browser_screenshot') {
-    return localized(locale, 'Capture the visible area of the current page as an image', '截取当前页面的可见区域为图片')
+  if (call.name === 'browser_screenshot') {
+    return call.args.fullPage === true
+      ? localized(locale, 'Capture the whole current page as one image', '截取整个当前页面为一张图片')
+      : localized(locale, 'Capture the visible area of the current page as an image', '截取当前页面的可见区域为图片')
   }
   return localized(locale, 'Read the current page and accessible iframes', '读取当前页面及可访问 iframe')
 }
@@ -166,6 +171,19 @@ function summarizeAction(call: ToolCall, locale: UiLocale): string {
         `在页面横向 ${across}%、纵向 ${down}% 处点击`,
       )
     }
+    case 'browser_hover': return localized(
+      locale,
+      `Move the pointer onto ${describeTarget(locale, call)} and leave it there`,
+      `把鼠标移到${describeTarget(locale, call)}并停在那里`,
+    )
+    case 'browser_drag': return localized(
+      locale,
+      `Drag from ${describeTarget(locale, call, 'from')} to ${describeTarget(locale, call, 'to')}`,
+      `从${describeTarget(locale, call, 'from')}拖拽到${describeTarget(locale, call, 'to')}`,
+    )
+    // Every step is listed: one approval covers the whole batch, so this prompt
+    // is the only place the user sees what the batch will actually do.
+    case 'browser_batch': return batchSummary(call, locale)
     case 'browser_navigate': return localized(
       locale,
       `Navigate to ${displayUrl(typeof call.args.url === 'string' ? call.args.url : '', locale)}`,
@@ -190,6 +208,46 @@ function summarizeAction(call: ToolCall, locale: UiLocale): string {
     case 'browser_reload': return localized(locale, 'Reload the current page', '重新加载当前页面')
     default: return call.name
   }
+}
+
+/**
+ * Name one hover/drag endpoint the way the user thinks about it: an inventory
+ * number when the call used one, a spot on the screen when it used fractions.
+ */
+function describeTarget(locale: UiLocale, call: ToolCall, prefix = ''): string {
+  const index = call.args[`${prefix}index`]
+  if (typeof index === 'number') {
+    return localized(locale, `element [${index}]`, `元素 [${index}]`)
+  }
+  const x = call.args[`${prefix}x`]
+  const y = call.args[`${prefix}y`]
+  if (typeof x === 'number' && typeof y === 'number') {
+    return localized(
+      locale,
+      `the point ${Math.round(x * 100)}% across and ${Math.round(y * 100)}% down`,
+      `横向 ${Math.round(x * 100)}%、纵向 ${Math.round(y * 100)}% 的位置`,
+    )
+  }
+  return localized(locale, 'an unset target', '一个未指定的位置')
+}
+
+/** Expand one batch into the individual actions it would run, in order. */
+function batchSummary(call: ToolCall, locale: UiLocale): string {
+  const raw = call.args.actions
+  const entries = Array.isArray(raw) ? raw : []
+  const parts = entries.map((entry) => {
+    if (typeof entry !== 'object' || entry === null) return '?'
+    const tool = (entry as { tool?: unknown }).tool
+    const args = (entry as { args?: unknown }).args
+    if (typeof tool !== 'string' || tool === '') return '?'
+    const stepArgs = typeof args === 'object' && args !== null ? args as Record<string, unknown> : {}
+    return summarizeAction({ id: call.id, name: tool, args: stepArgs }, locale)
+  })
+  return localized(
+    locale,
+    `Run ${parts.length} actions in a row: ${parts.join('; ')}`,
+    `连续执行 ${parts.length} 个操作：${parts.join('；')}`,
+  )
 }
 
 function displayUrl(value: string, locale: UiLocale): string {

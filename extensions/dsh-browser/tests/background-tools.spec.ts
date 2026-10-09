@@ -41,6 +41,14 @@ function mockChrome(options: {
   /** Set to false to simulate the debugger permission being withheld. */
   debuggerGranted?: boolean
   debuggerAttachError?: Error
+  /** Centre of the element an indexed point tool resolves, in viewport pixels. */
+  elementCenter?: { x: number; y: number }
+  /** Set to true so an indexed lookup reports that the element is gone. */
+  elementMissing?: boolean
+  /** What `Page.getLayoutMetrics` answers with. */
+  layoutMetrics?: unknown
+  /** What `Page.captureScreenshot` answers with. */
+  captureResult?: unknown
 }) {
   const responses = [...(options.responses ?? [OK])]
   const runtimeListeners = new Set<(message: unknown, sender: chrome.runtime.MessageSender) => void>()
@@ -62,10 +70,16 @@ function mockChrome(options: {
     if (response instanceof Error) throw response
     return response
   })
-  // Content-script injection ignores the result; point clicks read the viewport
-  // size out of it, so the stub answers with a fixed viewport.
+  // Content-script injection ignores the result; the point tools read the
+  // viewport size out of it, and an indexed one also reads the element centre.
   const executeScript = options.injectionError === undefined
-    ? vi.fn(async () => [{ frameId: 0, result: { width: 800, height: 600 } }])
+    ? vi.fn(async (injection?: { args?: unknown[] }) => {
+      const wanted = injection?.args?.[0]
+      if (typeof wanted !== 'number') return [{ frameId: 0, result: { width: 800, height: 600 } }]
+      if (options.elementMissing === true) return [{ frameId: 0, result: { width: 800, height: 600, missing: true } }]
+      const centre = options.elementCenter ?? { x: 400, y: 300 }
+      return [{ frameId: 0, result: { width: 800, height: 600, centerX: centre.x, centerY: centre.y } }]
+    })
     : vi.fn(async () => { throw options.injectionError })
   const allTabs = () => options.tabs ?? (options.tab === undefined ? [] : [options.tab as chrome.tabs.Tab])
   const query = vi.fn(async (queryInfo?: chrome.tabs.QueryInfo) => Object.keys(queryInfo ?? {}).length === 0
@@ -86,9 +100,14 @@ function mockChrome(options: {
     ? vi.fn(async () => undefined)
     : vi.fn(async () => { throw options.debuggerAttachError })
   const debuggerDetach = vi.fn(async () => undefined)
-  const debuggerSendCommand = vi.fn(async () => {
+  const debuggerSendCommand = vi.fn(async (_target: unknown, command: string, _payload?: unknown) => {
     if (options.evalResult instanceof Error) throw options.evalResult
-    return options.evalResult ?? { result: { type: 'number', value: 42 } }
+    switch (command) {
+      case 'Runtime.evaluate': return options.evalResult ?? { result: { type: 'number', value: 42 } }
+      case 'Page.getLayoutMetrics': return options.layoutMetrics ?? { cssContentSize: { width: 900, height: 2400 } }
+      case 'Page.captureScreenshot': return options.captureResult ?? { data: 'QUJD' }
+      default: return undefined
+    }
   })
   const permissionsContains = vi.fn(async () => options.debuggerGranted !== false)
   vi.stubGlobal('chrome', {
@@ -447,7 +466,9 @@ describe('dispatchToolCall', () => {
     expect(chromeMock.debuggerSendCommand).toHaveBeenCalledWith(
       { tabId: 7 },
       'Runtime.evaluate',
-      expect.objectContaining({ expression: '6*7' }),
+      // The user-gesture flag is what lets an expression reach APIs that a real
+      // click would have unlocked, such as clipboard writes and fullscreen.
+      expect.objectContaining({ expression: '6*7', userGesture: true }),
     )
   })
 
@@ -518,6 +539,258 @@ describe('dispatchToolCall', () => {
 
     expect(answer).toMatchObject({ ok: false, error: { message: expect.stringContaining('between 0 and 1') } })
     expect(chromeMock.debuggerAttach).not.toHaveBeenCalled()
+  })
+
+  it('hovers the centre of an indexed element and waits for the page to react', async () => {
+    const chromeMock = mockChrome({
+      tab: { id: 41, url: 'https://example.com' },
+      elementCenter: { x: 120, y: 64 },
+    })
+    await dispatchToolCall(CALL, 'auto')
+
+    const answer = await dispatchToolCall(
+      { ...CALL, name: 'browser_hover', args: { index: 4 } },
+      'auto',
+      undefined,
+      async () => 'approved' as const,
+    )
+
+    expect(answer).toMatchObject({ ok: true, result: { text: expect.stringContaining('(120, 64)') } })
+    const moves = chromeMock.debuggerSendCommand.mock.calls.filter(([, command]) => command === 'Input.dispatchMouseEvent')
+    // Two moves: one to enter the element, one so menus that ignore the entry
+    // event still see the pointer travel.
+    expect(moves).toHaveLength(2)
+    expect(moves[0]?.[2]).toMatchObject({ type: 'mouseMoved', x: 120, y: 64, button: 'none' })
+    expect(chromeMock.debuggerDetach).toHaveBeenCalledTimes(1)
+  })
+
+  it('hovers a viewport fraction without needing an inventory entry', async () => {
+    const chromeMock = mockChrome({ tab: { id: 42, url: 'https://example.com' } })
+
+    const answer = await dispatchToolCall(
+      { ...CALL, name: 'browser_hover', args: { x: 0.25, y: 0.5 } },
+      'auto',
+      undefined,
+      async () => 'approved' as const,
+    )
+
+    expect(answer).toMatchObject({ ok: true, result: { text: expect.stringContaining('(200, 300)') } })
+    expect(chromeMock.executeScript).toHaveBeenCalledTimes(1)
+  })
+
+  it('reports a hovered element that is no longer on the page', async () => {
+    const chromeMock = mockChrome({ tab: { id: 47, url: 'https://example.com' }, elementMissing: true })
+    await dispatchToolCall(CALL, 'auto')
+
+    const answer = await dispatchToolCall(
+      { ...CALL, name: 'browser_hover', args: { index: 9 } },
+      'auto',
+      undefined,
+      async () => 'approved' as const,
+    )
+
+    expect(answer).toMatchObject({ ok: false, error: { message: expect.stringContaining('no longer on the page') } })
+    expect(chromeMock.debuggerAttach).not.toHaveBeenCalled()
+  })
+
+  it('drags along an interpolated path from press to release', async () => {
+    const chromeMock = mockChrome({ tab: { id: 43, url: 'https://example.com' } })
+
+    const answer = await dispatchToolCall(
+      { ...CALL, name: 'browser_drag', args: { fromX: 0.1, fromY: 0.5, toX: 0.9, toY: 0.5, steps: 4 } },
+      'auto',
+      undefined,
+      async () => 'approved' as const,
+    )
+
+    expect(answer).toMatchObject({ ok: true, result: { text: expect.stringContaining('in 4 steps') } })
+    const events = chromeMock.debuggerSendCommand.mock.calls
+      .filter(([, command]) => command === 'Input.dispatchMouseEvent')
+      .map(([, , payload]) => payload as { type: string; x: number; y: number })
+    expect(events.map((event) => event.type)).toEqual([
+      'mouseMoved',
+      'mousePressed',
+      'mouseMoved',
+      'mouseMoved',
+      'mouseMoved',
+      'mouseMoved',
+      'mouseReleased',
+    ])
+    expect(events.at(-1)).toMatchObject({ type: 'mouseReleased', x: 720, y: 300 })
+    expect(chromeMock.debuggerDetach).toHaveBeenCalledTimes(1)
+  })
+
+  it('captures the whole page through the debugger without activating the tab', async () => {
+    const chromeMock = mockChrome({ tab: { id: 44, url: 'https://example.com', active: false } })
+
+    const answer = await dispatchToolCall(
+      { ...CALL, name: 'browser_screenshot', args: { fullPage: true } },
+      'auto',
+    )
+
+    const result = answer.result as { text: string; screenshot?: { mime: string; base64: string } }
+    expect(result.text).toContain('whole page')
+    expect(result.text).toContain('900×2400')
+    expect(result.screenshot).toEqual({ mime: 'image/jpeg', base64: 'QUJD' })
+    expect(chromeMock.debuggerSendCommand).toHaveBeenCalledWith(
+      { tabId: 44 },
+      'Page.captureScreenshot',
+      expect.objectContaining({ captureBeyondViewport: true }),
+    )
+    // The pixels come from the renderer, so the user's tab is never yanked to
+    // the front the way a viewport capture has to.
+    expect(chromeMock.update).not.toHaveBeenCalled()
+  })
+
+  it('stops a full-page capture at the height ceiling and says so', async () => {
+    const chromeMock = mockChrome({
+      tab: { id: 48, url: 'https://example.com' },
+      layoutMetrics: { cssContentSize: { width: 800, height: 40_000 } },
+      captureResult: { data: 'QUJD' },
+    })
+
+    const answer = await dispatchToolCall(
+      { ...CALL, name: 'browser_screenshot', args: { fullPage: true, format: 'png' } },
+      'auto',
+    )
+
+    const result = answer.result as { text: string }
+    expect(result.text).toContain('16000px')
+    expect(result.text).toContain('40000px')
+    expect(chromeMock.debuggerSendCommand).toHaveBeenCalledWith(
+      { tabId: 48 },
+      'Page.captureScreenshot',
+      expect.objectContaining({ format: 'png', clip: expect.objectContaining({ height: 16_000 }) }),
+    )
+  })
+
+  it('runs a batch in order with one approval and no per-step page delta', async () => {
+    const approvals: string[] = []
+    const chromeMock = mockChrome({
+      tab: { id: 45, url: 'https://app.example/' },
+      respond: (message) => (message as { action?: string }).action === 'browser_snapshot'
+        ? { ok: true, result: { text: 'Initial page' } }
+        : { ok: true, result: { text: `did ${(message as { action?: string }).action}` } },
+    })
+    await dispatchToolCall(CALL, 'auto')
+    chromeMock.sendMessage.mockClear()
+
+    const answer = await dispatchToolCall(
+      {
+        ...CALL,
+        name: 'browser_batch',
+        args: {
+          actions: [
+            { tool: 'browser_click', args: { index: 3 } },
+            { tool: 'browser_type', args: { index: 4, text: 'hi' } },
+            { tool: 'browser_press', args: { key: 'Enter' } },
+          ],
+        },
+      },
+      'auto',
+      undefined,
+      async (prompt) => {
+        approvals.push(prompt.summary)
+        return 'approved' as const
+      },
+    )
+
+    expect((answer.result as { text: string }).text).toContain('Ran 3 actions in a row.')
+    expect(chromeMock.sendMessage.mock.calls.map((call) => (call[1] as { action: string }).action))
+      .toEqual(['browser_click', 'browser_type', 'browser_press'])
+    // One prompt covers the whole batch, so it has to name every step.
+    expect(approvals).toHaveLength(1)
+    expect(approvals[0]).toContain('3 actions')
+    expect(approvals[0]).toContain('element [3]')
+    // A batch answers with its own report, so no step pays for a page delta.
+    for (const call of chromeMock.sendMessage.mock.calls) {
+      expect((call[1] as { includePageDelta?: boolean }).includePageDelta).toBeUndefined()
+    }
+  })
+
+  it('appends the page state to a batch only when asked', async () => {
+    const chromeMock = mockChrome({
+      tab: { id: 49, url: 'https://app.example/' },
+      respond: (message) => (message as { action?: string }).action === 'browser_snapshot'
+        ? { ok: true, result: { text: 'Page state v9' } }
+        : { ok: true, result: { text: 'clicked' } },
+    })
+    await dispatchToolCall(CALL, 'auto')
+    chromeMock.sendMessage.mockClear()
+
+    const answer = await dispatchToolCall(
+      {
+        ...CALL,
+        name: 'browser_batch',
+        args: { actions: [{ tool: 'browser_click', args: { index: 3 } }], snapshot: true },
+      },
+      'auto',
+      undefined,
+      async () => 'approved' as const,
+    )
+
+    const text = (answer.result as { text: string }).text
+    expect(text).toContain('Ran 1 action in a row.')
+    expect(text).toContain('Page state after the batch:')
+    expect(text).toContain('Page state v9')
+  })
+
+  it('stops a batch at the first failed step and still reports every step it ran', async () => {
+    const chromeMock = mockChrome({
+      tab: { id: 46, url: 'https://app.example/' },
+      respond: (message) => {
+        const action = (message as { action?: string }).action
+        if (action === 'browser_snapshot') return { ok: true, result: { text: 'Initial page' } }
+        if (action === 'browser_press') return { ok: false, error: { code: 'action-failed', message: 'nothing is focused' } }
+        return { ok: true, result: { text: `did ${action}` } }
+      },
+    })
+    await dispatchToolCall(CALL, 'auto')
+    chromeMock.sendMessage.mockClear()
+
+    const answer = await dispatchToolCall(
+      {
+        ...CALL,
+        name: 'browser_batch',
+        args: {
+          actions: [
+            { tool: 'browser_click', args: { index: 3 } },
+            { tool: 'browser_press', args: { key: 'Enter' } },
+            { tool: 'browser_click', args: { index: 5 } },
+          ],
+        },
+      },
+      'auto',
+      undefined,
+      async () => 'approved' as const,
+    )
+
+    const text = (answer.result as { text: string }).text
+    expect(text).toContain('Ran 1 of 3 actions')
+    expect(text).toContain('nothing is focused')
+    expect(chromeMock.sendMessage.mock.calls.map((call) => (call[1] as { action: string }).action))
+      .toEqual(['browser_click', 'browser_press'])
+  })
+
+  it('refuses a batch step that may not run inside one', async () => {
+    const chromeMock = mockChrome({ tab: { id: 50, url: 'https://app.example/' } })
+
+    const answer = await dispatchToolCall(
+      {
+        ...CALL,
+        name: 'browser_batch',
+        args: { actions: [{ tool: 'browser_navigate', args: { url: 'https://other.example/' } }] },
+      },
+      'auto',
+      undefined,
+      async () => 'approved' as const,
+    )
+
+    expect(answer).toMatchObject({
+      ok: false,
+      error: { message: expect.stringContaining('cannot run "browser_navigate"') },
+    })
+    expect(chromeMock.sendMessage).not.toHaveBeenCalled()
   })
 
   it('dispatches to an explicitly bound background tab without querying the active tab', async () => {
