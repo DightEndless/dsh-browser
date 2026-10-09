@@ -644,8 +644,14 @@ describe('dispatchToolCall', () => {
     expect(chromeMock.debuggerSendCommand).toHaveBeenCalledWith(
       { tabId: 44 },
       'Page.captureScreenshot',
-      expect.objectContaining({ captureBeyondViewport: true }),
+      expect.objectContaining({ clip: { x: 0, y: 0, width: 900, height: 2400, scale: 1 } }),
     )
+    // `captureBeyondViewport` must stay off: with a clip it repaints the page
+    // into the spare space and the capture comes back as repeated screenfuls.
+    const [, , payload] = chromeMock.debuggerSendCommand.mock.calls.find(
+      (call) => call[1] === 'Page.captureScreenshot',
+    ) as [unknown, string, Record<string, unknown>]
+    expect(payload).not.toHaveProperty('captureBeyondViewport')
     // The pixels come from the renderer, so the user's tab is never yanked to
     // the front the way a viewport capture has to.
     expect(chromeMock.update).not.toHaveBeenCalled()

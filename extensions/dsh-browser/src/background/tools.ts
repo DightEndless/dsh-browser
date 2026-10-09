@@ -484,6 +484,8 @@ async function dispatchFullPageScreenshot(tabId: number, call: ToolCall, signal?
   const quality = Math.min(100, Math.max(1, Math.round(requestedQuality)))
   return await runWithDebugger(tabId, async (target) => {
     if (isCancelled(call, signal)) return cancelled()
+    let overrodeViewport = false
+    let restoredScroll: number | undefined
     try {
       const metrics = await chrome.debugger.sendCommand(target, 'Page.getLayoutMetrics') as {
         cssContentSize?: { width?: number; height?: number }
@@ -497,10 +499,38 @@ async function dispatchFullPageScreenshot(tabId: number, call: ToolCall, signal?
       }
       const clipped = height > FULL_PAGE_MAX_CSS_PIXELS
       const captureHeight = clipped ? FULL_PAGE_MAX_CSS_PIXELS : height
+
+      // Grow the layout viewport to the whole page before shooting. A clip
+      // taller than the viewport does not extend the captured area: the
+      // compositor repaints the viewport contents into the extra space, so a
+      // long page came back as the same screenful repeated down the image.
+      const view = await chrome.debugger.sendCommand(target, 'Runtime.evaluate', {
+        expression: `(() => {
+          const y = window.scrollY
+          ${captureHeight > FULL_PAGE_MAX_CSS_PIXELS ? '' : `document.documentElement.style.minHeight = '${captureHeight}px';`}
+          window.scrollTo(0, 0)
+          return y + '|' + window.innerWidth + '|' + window.innerHeight
+        })()`,
+        returnByValue: true,
+      }) as { result?: { value?: unknown } }
+      const shape = String(view?.result?.value ?? '').split('|')
+      restoredScroll = Number(shape[0])
+      if (!Number.isFinite(restoredScroll)) restoredScroll = 0
+      const viewportWidth = Number(shape[1])
+      const viewportHeight = Number(shape[2])
+      if (Number.isFinite(viewportHeight) && viewportHeight < captureHeight) {
+        await chrome.debugger.sendCommand(target, 'Emulation.setDeviceMetricsOverride', {
+          width: Number.isFinite(viewportWidth) && viewportWidth > 0 ? viewportWidth : width,
+          height: captureHeight,
+          deviceScaleFactor: 1,
+          mobile: false,
+        })
+        overrodeViewport = true
+      }
+      await new Promise((resolve) => setTimeout(resolve, 200))
       const answer = await chrome.debugger.sendCommand(target, 'Page.captureScreenshot', {
         format,
         ...format === 'jpeg' ? { quality } : {},
-        captureBeyondViewport: true,
         clip: { x: 0, y: 0, width, height: captureHeight, scale: 1 },
       }) as { data?: string }
       const base64 = typeof answer?.data === 'string' ? answer.data : ''
@@ -518,6 +548,45 @@ async function dispatchFullPageScreenshot(tabId: number, call: ToolCall, signal?
     } catch (error: unknown) {
       const detail = error instanceof Error ? error.message : String(error)
       return unavailable(`The full-page screenshot could not be taken: ${detail}`)
+    } finally {
+      // Put the page back the way the user had it: the grown viewport and the
+      // minimum height are ours, not the page's. The scroll is restored while the
+      // tall viewport is still in place, then the override is cleared; a short
+      // viewport would clamp the restored offset straight back to the top.
+      const wantedScroll = restoredScroll ?? 0
+      const restore = await chrome.debugger
+        .sendCommand(target, 'Runtime.evaluate', {
+          expression: `(async () => {
+            document.documentElement.style.minHeight = ''
+            await new Promise((resolve) => setTimeout(resolve, 50))
+            window.scrollTo(0, ${wantedScroll})
+            await new Promise((resolve) => setTimeout(resolve, 50))
+            return window.scrollY
+          })()`,
+          awaitPromise: true,
+          returnByValue: true,
+        })
+        .catch(() => undefined) as { result?: { value?: unknown } } | undefined
+      const landed = Number(restore?.result?.value)
+      if (Number.isFinite(landed) && Math.abs(landed - wantedScroll) > 2) {
+        // A page that reflows under the restored offset can clamp it; put it back
+        // once after the override is gone.
+        await chrome.debugger
+          .sendCommand(target, 'Emulation.clearDeviceMetricsOverride')
+          .catch(() => undefined)
+        overrodeViewport = false
+        await chrome.debugger
+          .sendCommand(target, 'Runtime.evaluate', {
+            expression: `window.scrollTo(0, ${wantedScroll})`,
+            returnByValue: true,
+          })
+          .catch(() => undefined)
+      }
+      if (overrodeViewport) {
+        await chrome.debugger
+          .sendCommand(target, 'Emulation.clearDeviceMetricsOverride')
+          .catch(() => undefined)
+      }
     }
   })
 }
