@@ -239,6 +239,66 @@ describe('registerBrowserTools', () => {
     expect(descriptionChars).toBeLessThan(3_200)
   })
 
+  it('writes a returned screenshot to a file and hands the model its path', async () => {
+    const { ctx, bridge, requestTool, registered } = makeHarness()
+    registerBrowserTools(ctx, bridge, { toolTimeoutMs: 1_000, snapshotMaxChars: 12_000, maxInteractiveItems: 60 })
+    // 'QUJD' is base64 for ABC.
+    requestTool.mockResolvedValueOnce({ text: 'captured', screenshot: { mime: 'image/png', base64: 'QUJD' } })
+    const tool = registered.find((r) => r.name === 'browser_screenshot')!
+    const result = await (tool.definition.execute as (args: unknown, e: { signal: AbortSignal }) => Promise<{ text: string }>)(
+      {},
+      { signal: new AbortController().signal },
+    )
+    // The base64 must not survive into the model's view; only a path may.
+    expect(result.text).toContain('captured')
+    expect(result.text).not.toContain('QUJD')
+    const file = /([A-Za-z]:\\[^\n]+\.png)/.exec(result.text)?.[1]
+    expect(file).toBeDefined()
+    const { readFileSync, rmSync } = await import('node:fs')
+    try {
+      expect(readFileSync(file!, 'utf8')).toBe('ABC')
+    } finally {
+      rmSync(file!, { force: true })
+    }
+  })
+
+  it('reads a local file for browser_upload without echoing its bytes', async () => {
+    const { ctx, bridge, requestTool, registered } = makeHarness()
+    registerBrowserTools(ctx, bridge, { toolTimeoutMs: 1_000, snapshotMaxChars: 12_000, maxInteractiveItems: 60 })
+    const { writeFileSync, rmSync } = await import('node:fs')
+    const { join, basename } = await import('node:path')
+    const { tmpdir } = await import('node:os')
+    const path = join(tmpdir(), `dsh-upload-${Date.now()}.txt`)
+    writeFileSync(path, 'hello upload')
+    try {
+      const tool = registered.find((r) => r.name === 'browser_upload')!
+      const result = await (tool.definition.execute as (args: unknown, e: { signal: AbortSignal }) => Promise<{ text: string }>)(
+        { index: 4, path },
+        { signal: new AbortController().signal },
+      )
+      const [, args] = requestTool.mock.calls.at(-1) as [string, Record<string, unknown>]
+      expect(args.index).toBe(4)
+      expect(args.name).toBe(basename(path))
+      expect(args.contentBase64).toBe(Buffer.from('hello upload').toString('base64'))
+      expect(result.text).toBe('ok')
+      expect(result.text).not.toContain('aGVsbG8')
+    } finally {
+      rmSync(path, { force: true })
+    }
+  })
+
+  it('reports a missing upload file without dispatching to the browser', async () => {
+    const { ctx, bridge, requestTool, registered } = makeHarness()
+    registerBrowserTools(ctx, bridge, { toolTimeoutMs: 1_000, snapshotMaxChars: 12_000, maxInteractiveItems: 60 })
+    const tool = registered.find((r) => r.name === 'browser_upload')!
+    const result = await (tool.definition.execute as (args: unknown, e: { signal: AbortSignal }) => Promise<{ text: string }>)(
+      { index: 1, path: 'C:\\definitely\\missing\\dsh-upload.txt' },
+      { signal: new AbortController().signal },
+    )
+    expect(result.text).toContain('Could not read')
+    expect(requestTool).not.toHaveBeenCalled()
+  })
+
   it('exposes optional frame routing on frame-local tools only', () => {
     const { ctx, bridge, registered } = makeHarness()
     registerBrowserTools(ctx, bridge, { toolTimeoutMs: 5_000, snapshotMaxChars: 12_000, maxInteractiveItems: 60 })
