@@ -14,6 +14,15 @@ versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **`browser_screenshot` could not take a viewport capture.** Every call failed
+  with a permission error about `<all_urls>`/`activeTab`, even with the
+  extension's site access set to all sites, because `captureVisibleTab` needs
+  that permission for the photographed tab. It now falls back to the DevTools
+  protocol, which the extension may use through its `debugger` permission and
+  which reads the same viewport from the renderer; the answer says which route
+  produced the image. The viewport path had no test at all — the mock chrome did
+  not even define `captureVisibleTab` — so both that and the mime it built
+  (`image/image/jpeg`) went unnoticed; both are now pinned by tests.
 - **`browser_upload` attached nothing.** The bridge read the file in a second
   message sent after the approval, but the extension never received that message,
   and the four dispatch sites never named the approval the bridge was waiting for,
