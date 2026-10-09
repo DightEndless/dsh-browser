@@ -87,6 +87,16 @@ export const TAB_MANAGEMENT_TOOL_NAMES = new Set([
   'browser_follow_tab',
   'browser_close_tab',
 ])
+/**
+ * Tools whose entire result is page content. With sharing off these must be
+ * refused before the tab is even looked at.
+ */
+const PAGE_CONTENT_TOOL_NAMES = new Set([
+  'browser_snapshot',
+  'browser_get_text',
+  'browser_images',
+  'browser_screenshot',
+])
 const NAVIGATION_SNAPSHOT_GUIDANCE = 'Navigation completed and the current page snapshot is included below. Use it directly instead of taking an immediate duplicate snapshot.'
 const pendingInjections = new Map<number, Promise<void>>()
 const snapshotDocumentsByTab = new Map<number, Map<number, string>>()
@@ -807,7 +817,64 @@ async function dispatchTabManagementTool(
  * @returns the content script's answer, or a stable error when no tab or
  *   content script is available.
  */
+/** Tabs with a page tool in flight, so two sessions cannot interleave on one page. */
+const tabsInFlight = new Set<number>()
+
+/**
+ * Serialize page tools per tab.
+ *
+ * Tab affinity stops one session from wandering onto another session's tab, but
+ * nothing stopped two sessions from driving the *same* tab at once — and
+ * interleaved clicks and typing on one page produce a state neither caller asked
+ * for. The lock covers a single call and fails fast, so the second caller learns
+ * immediately instead of queueing behind a long timeout.
+ */
 export async function dispatchToolCall(
+  call: ToolCall,
+  sharePageContent: 'ask' | 'auto' | 'off',
+  budget?: ContentBudget,
+  authorize?: (prompt: ApprovalPrompt) => Promise<ApprovalAuthorization>,
+  signal?: AbortSignal,
+  targetTab?: Pick<chrome.tabs.Tab, 'id' | 'url' | 'title'> & { windowId?: number },
+  targetStillAllowed?: () => boolean,
+  tabManagement: TabManagementContext = { unrestrictedAccess: false },
+): Promise<ToolAnswer> {
+  const run = () => dispatchToolCallUnlocked(
+    call,
+    sharePageContent,
+    budget,
+    authorize,
+    signal,
+    targetTab,
+    targetStillAllowed,
+    tabManagement,
+  )
+  if (call.name === 'browser_open_tab' || isTabManagementTool(call.name)) return run()
+  // Privacy boundary comes first: with sharing off the call is refused without
+  // looking at a tab at all, so the lock must not probe one either.
+  if (!tabManagement.unrestrictedAccess && sharePageContent === 'off' && PAGE_CONTENT_TOOL_NAMES.has(call.name)) {
+    return run()
+  }
+  const probe = targetTab?.id ?? (await chrome.tabs.query({ active: true, lastFocusedWindow: true }))[0]?.id
+  if (probe === undefined) return run()
+  if (tabsInFlight.has(probe)) {
+    return {
+      ok: false,
+      error: {
+        code: 'action-failed',
+        message: 'Another browser call is already running on this tab. Wait for it to finish, then retry.',
+      },
+    }
+  }
+  tabsInFlight.add(probe)
+  try {
+    return await run()
+  } finally {
+    tabsInFlight.delete(probe)
+  }
+}
+
+async function dispatchToolCallUnlocked(
   call: ToolCall,
   sharePageContent: 'ask' | 'auto' | 'off',
   budget?: ContentBudget,
@@ -828,7 +895,7 @@ export async function dispatchToolCall(
   // Privacy boundary: with sharing off, no page content may leave the page.
   if (!tabManagement.unrestrictedAccess
     && sharePageContent === 'off'
-    && (call.name === 'browser_snapshot' || call.name === 'browser_get_text' || call.name === 'browser_images' || call.name === 'browser_screenshot')) {
+    && PAGE_CONTENT_TOOL_NAMES.has(call.name)) {
     return { ok: false, error: { code: 'action-failed', message: 'Page content sharing is disabled in Settings > Page content sharing.' } }
   }
   const tab = targetTab ?? (await chrome.tabs.query({ active: true, lastFocusedWindow: true }))[0]
