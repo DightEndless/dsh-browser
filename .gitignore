@@ -5,3 +5,9 @@ node_modules/
 !benchmark/lib/**
 **/dist/
 **/dist-firefox/
+
+# Machine-local artifacts: generated output and installer bookkeeping.
+coverage/
+tsc.log
+.managed-by-install-sh
+*.tgz
