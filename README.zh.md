@@ -1,7 +1,7 @@
 # dsh 浏览器操作
 
 > [!NOTE]
-> **打开浏览器扩展侧边栏，就能原地接管你当前正在浏览的网页**——就在你本来开着的那个浏览器里，profile、登录态与会话原样不动。
+> **打开浏览器扩展侧边栏，就能原地接管你当前正在浏览的网页。**
 >
 > **本仓库是 [omdsh-dev/dsh-browser](https://github.com/omdsh-dev/dsh-browser) 的 fork**，补齐了上游没有的能力：视口与整页 `browser_screenshot`、`browser_hover`、`browser_click_at`、`browser_drag`、`browser_batch`、`browser_eval`、`browser_upload`、`browser_images`。桥接包使用独立的包名 `@dightendless/dsh-bridge-browser`，因此本 fork 与上游包可以同时存在于同一个 dsh profile 中，不会互相顶替。
 

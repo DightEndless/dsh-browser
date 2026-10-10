@@ -1,7 +1,7 @@
 # dsh Browser Control
 
 > [!NOTE]
-> **Open the extension side panel and it takes over the page you are browsing right now**, in the browser you already have open — same profile, logins, and session.
+> **Open the extension side panel and it takes over the page you are browsing right now.**
 >
 > **This is a fork of [omdsh-dev/dsh-browser](https://github.com/omdsh-dev/dsh-browser)** that fills in what upstream lacks: viewport and whole-page `browser_screenshot`, `browser_hover`, `browser_click_at`, `browser_drag`, `browser_batch`, `browser_eval`, `browser_upload`, and `browser_images`. Its bridge package is `@dightendless/dsh-bridge-browser` — a name of its own, so this fork and the upstream package can sit in one dsh profile without replacing each other.
 
