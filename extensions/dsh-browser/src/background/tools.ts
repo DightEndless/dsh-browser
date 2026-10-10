@@ -18,6 +18,7 @@ import {
   type TabFrame,
 } from './frames.ts'
 import { wrapUntrustedContent } from '../security/untrusted.ts'
+import { ELEMENT_IDS_GLOBAL } from '../content/ids.ts'
 import { approvalPromptForCall, originFromUrl } from './authorization.ts'
 import { waitForNextDocumentReady } from './navigation.ts'
 import type { ApprovalAuthorization, ApprovalPrompt } from '../security/approval.ts'
@@ -740,16 +741,25 @@ async function resolvePoint(
   try {
     const [injected] = await chrome.scripting.executeScript({
       target: { tabId },
-      func: (wanted: number | null) => {
+      func: (wanted: number | null, registryKey: string) => {
         const width = window.innerWidth
         const height = window.innerHeight
         if (wanted === null) return { width, height }
-        const element = document.querySelector(`[data-dsh-el="${wanted}"]`)
-        if (element === null) return { width, height, missing: true }
+        // Prefer the content script's registry: it lives in this same isolated
+        // world, where the page can neither read nor change it. `data-dsh-el` is
+        // a DOM attribute, so a page script could move it or invent one and
+        // redirect an already-approved click; it stays only as the fallback for
+        // a frame whose content script has not published a registry yet.
+        const registry = (globalThis as Record<string, unknown>)[registryKey] as
+          { elementByIndex?: (index: number) => Element | undefined } | undefined
+        const element = registry !== undefined
+          ? registry.elementByIndex?.(wanted)
+          : document.querySelector(`[data-dsh-el="${wanted}"]`)
+        if (element === null || element === undefined) return { width, height, missing: true }
         const rect = element.getBoundingClientRect()
         return { width, height, centerX: rect.left + rect.width / 2, centerY: rect.top + rect.height / 2 }
       },
-      args: [index ?? null],
+      args: [index ?? null, ELEMENT_IDS_GLOBAL],
     })
     measured = injected?.result as typeof measured
   } catch {

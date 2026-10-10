@@ -14,6 +14,18 @@
 const ID_ATTRIBUTE = 'data-dsh-el'
 
 /**
+ * Isolated-world global that holds the live registry.
+ *
+ * The background resolves an inventory number to a point by injecting a script,
+ * and that script runs in this same isolated world. Reading the registry there
+ * keeps the lookup out of the page's reach: `data-dsh-el` is a DOM attribute, so
+ * any page script can read it, move it, or invent one, which would let a page
+ * redirect an approved click. The attribute is kept as the fallback for frames
+ * whose content script has not published a registry yet.
+ */
+export const ELEMENT_IDS_GLOBAL = '__dshElementIds'
+
+/**
  * Stable element → id registry. One instance per content-script lifetime.
  */
 export class ElementIds {

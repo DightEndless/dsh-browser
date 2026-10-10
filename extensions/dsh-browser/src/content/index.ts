@@ -12,7 +12,7 @@
 
 import { DEFAULT_SNAPSHOT_MAX_CHARS } from '@dightendless/dsh-bridge-browser/src/protocol.ts'
 import { runAction, ActionError } from './actions.ts'
-import { ElementIds } from './ids.ts'
+import { ElementIds, ELEMENT_IDS_GLOBAL } from './ids.ts'
 import { SelectionWatcher } from './selection.ts'
 import type { SnapshotBudget } from './snapshot.ts'
 
@@ -104,6 +104,10 @@ if (previousListener !== undefined) {
 contentGlobal[CONTENT_SELECTION_WATCHER]?.dispose()
 contentGlobal[CONTENT_SCRIPT_LISTENER] = onMessage
 contentGlobal[CONTENT_SELECTION_WATCHER] = selectionWatcher
+// Publish the id registry in the isolated world as well, so the injected script
+// that resolves a snapshot index to a point reads it from here instead of from
+// the page-writable `data-dsh-el` attribute.
+;(globalThis as Record<string, unknown>)[ELEMENT_IDS_GLOBAL] = ids
 chrome.runtime.onMessage.addListener(onMessage)
 
 // A navigation action answers before unloading. The replacement content
