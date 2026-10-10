@@ -14,7 +14,7 @@
  * and remember `session.selectModel` until materialization, so the composer can
  * show a model switcher before the first message.
  *
- * @module @yuxianglin/dsh-bridge-browser/src/session-deferral
+ * @module @dightendless/dsh-bridge-browser/src/session-deferral
  */
 
 import type { ImageAttachmentLimits } from '@deepseek-ai/dsh-attachment'

@@ -10,7 +10,7 @@
  * @module
  */
 
-import type { BridgeBrowserInfo } from '@yuxianglin/dsh-bridge-browser/src/protocol.ts'
+import type { BridgeBrowserInfo } from '@dightendless/dsh-bridge-browser/src/protocol.ts'
 
 /** Whether this install runs inside Microsoft Edge. */
 export const IS_EDGE: boolean = /edg\//i.test(globalThis.navigator?.userAgent ?? '')

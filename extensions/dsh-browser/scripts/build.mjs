@@ -1,13 +1,22 @@
 /**
- * Build all three extension targets sequentially into dist/ (or dist-firefox/
- * with --firefox):
- * background (es|iife) → content (iife) → panel (React). The first target
- * cleans the output; the later ones append. Pass --watch for dev rebuilds.
+ * Build every extension target sequentially into dist/ (or dist-firefox/
+ * with --firefox): background (es|iife) → content (iife) → main world (iife) →
+ * panel (React). The first target cleans the output; the later ones append.
+ * Pass --watch for dev rebuilds, --edge for the Edge-tagged Chromium build.
+ *
+ * Each target runs vite through Node's own entry point rather than the
+ * `node_modules/.bin` shell shim: spawning that shim needs a shell on Windows,
+ * and a teardown crash on that path (STATUS_STACK_BUFFER_OVERRUN, reported by
+ * Node 24.14.0 after the output is already written) would fail the build for
+ * no reason. scripts/build-crash.mjs tells that crash apart from a real one.
  */
 
 import { spawn, spawnSync } from 'node:child_process'
-import { readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs'
+import { createRequire } from 'node:module'
+import { resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { classifyTarget } from './build-crash.mjs'
 
 const root = fileURLToPath(new URL('..', import.meta.url))
 const watch = process.argv.includes('--watch')
@@ -23,6 +32,9 @@ if (process.argv.includes('--firefox')) {
 if (process.argv.includes('--edge')) {
   process.env.EXT_TARGET = process.env.EXT_TARGET ?? 'edge'
 }
+
+/** Where this build's passes land. */
+const distDir = resolve(root, process.env.EXT_TARGET === 'firefox' ? 'dist-firefox' : 'dist')
 
 /**
  * One public key for the Edge build. Chromium derives the unpacked extension id
@@ -49,6 +61,18 @@ function tagEdgeManifest() {
   console.log('tagged Edge extension name and manifest key')
 }
 
+/**
+ * Locate vite's entry point. Its exports map hides `bin/vite.js`, so read the
+ * package's own `bin` field instead of guessing the path.
+ */
+function resolveViteBin() {
+  const require = createRequire(import.meta.url)
+  const packagePath = require.resolve('vite/package.json')
+  const bin = JSON.parse(readFileSync(packagePath, 'utf8')).bin
+  const relative = typeof bin === 'string' ? bin : bin.vite
+  return resolve(packagePath, '..', relative)
+}
+
 const configs = [
   'vite.background.config.ts',
   'vite.content.config.ts',
@@ -67,13 +91,30 @@ if (watch) {
     child.on('exit', (code) => { if (code !== 0) process.exit(code ?? 1) })
   }
 } else {
+  const viteBin = resolveViteBin()
+  if (!existsSync(viteBin)) {
+    console.error(`build: vite entry not found at ${viteBin}`)
+    process.exit(1)
+  }
+  let teardownCrashes = 0
   for (const config of configs) {
-    const result = spawnSync('vite', ['build', '--config', config], {
+    const startedAt = Date.now()
+    const result = spawnSync(process.execPath, [viteBin, 'build', '--config', config], {
       cwd: root,
       stdio: 'inherit',
-      shell: process.platform === 'win32',
     })
-    if (result.status !== 0) process.exit(result.status ?? 1)
+    const outcome = classifyTarget(result, distDir, startedAt, { readdirSync, statSync })
+    if (outcome === 'failed') {
+      console.error(`build: ${config} failed (status ${result.status ?? 'none'}, signal ${result.signal ?? 'none'})`)
+      process.exit(result.status ?? 1)
+    }
+    if (outcome === 'teardown-crash') {
+      teardownCrashes += 1
+      console.warn(`build: ${config} wrote its output, then hit the Node teardown crash (0x${result.status.toString(16)}); continuing`)
+    }
   }
   tagEdgeManifest()
+  if (teardownCrashes > 0) {
+    console.warn(`build: ${teardownCrashes} target(s) crashed after writing output — Node ${process.version} does this on Windows; the artifacts are complete`)
+  }
 }

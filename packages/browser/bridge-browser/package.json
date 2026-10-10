@@ -1,5 +1,5 @@
 {
-  "name": "@yuxianglin/dsh-bridge-browser",
+  "name": "@dightendless/dsh-bridge-browser",
   "description": "Bridge plugin: token-authenticated WebSocket carrier for the browser extension plus text-only browser_* tools that drive the user's Chrome via that extension",
   "version": "0.2.0",
   "author": "Yuxiang Lin",
@@ -84,6 +84,7 @@
     "ws": "^8.21.0"
   },
   "scripts": {
+    "prepare": "pnpm run build",
     "test": "vitest run",
     "typecheck": "tsc -b --pretty false",
     "build": "tsc -b --pretty false && tsdown && node -e \"require('node:fs').copyFileSync('src/client.js', 'lib/client.js')\""

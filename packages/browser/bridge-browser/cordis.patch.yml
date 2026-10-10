@@ -6,11 +6,18 @@
 #
 # On first boot the plugin generates a bearer token and persists it at
 # ~/.dsh/ext-bridge-token (chmod 0600). Local extensions discover the bridge
-# without manual token entry. To pin a fixed token for a remote deployment,
-# set DSH_EXT_TOKEN and reference it below.
+# without manual token entry.
+#
+# To pin a fixed token for a remote deployment, add these two rows under
+# `config:` and install with the variables present in the environment:
+#     token: !!js process.env.DSH_EXT_TOKEN
+#     sessionWorkspacePath: !!js process.env.DSH_BROWSER_SESSION_WORKSPACE
+# They are left out on purpose: `!!js` is a DSH extension to YAML, and a patch
+# file without it also parses in a standard YAML reader.
+#
 # Extension-created sessions default to the ~/.dsh/browser-sessions workspace.
-# Set DSH_BROWSER_SESSION_WORKSPACE to choose another path, or to an empty
-# string to keep those sessions Ungrouped.
+# Set sessionWorkspacePath for another path, or to an empty string to keep those
+# sessions Ungrouped.
 # Sessions materialize only on the first message (deferSessionCreate defaults
 # to true): opening the side panel without chatting leaves no session behind.
 #
@@ -20,10 +27,8 @@
 
 - insert:
     - id: bridge-browser
-      name: '@yuxianglin/dsh-bridge-browser'
+      name: '@dightendless/dsh-bridge-browser'
       config:
-        token: !!js process.env.DSH_EXT_TOKEN
-        sessionWorkspacePath: !!js process.env.DSH_BROWSER_SESSION_WORKSPACE
         toolTimeoutMs: 90000
         snapshotMaxChars: 32000
         maxInteractiveItems: 60

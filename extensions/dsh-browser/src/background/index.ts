@@ -37,9 +37,9 @@ import {
   isRespondResult,
   type BridgeCaps,
   type RespondResult,
-} from '@yuxianglin/dsh-bridge-browser/src/protocol.ts'
-import type { ServerFrame } from '@yuxianglin/dsh-bridge-browser/src/protocol.ts'
-import { BRIDGE_CONFIG_PATH, BRIDGE_PATH } from '@yuxianglin/dsh-bridge-browser/src/protocol.ts'
+} from '@dightendless/dsh-bridge-browser/src/protocol.ts'
+import type { ServerFrame } from '@dightendless/dsh-bridge-browser/src/protocol.ts'
+import { BRIDGE_CONFIG_PATH, BRIDGE_PATH } from '@dightendless/dsh-bridge-browser/src/protocol.ts'
 import { BridgeClient, type BridgeState } from './bridge.ts'
 import { DEFAULT_UNRESTRICTED_BROWSER_ACCESS, getBrowserIdentity } from './detect-browser.ts'
 import { createRpc } from './rpc.ts'

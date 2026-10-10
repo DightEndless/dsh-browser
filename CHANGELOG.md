@@ -5,10 +5,50 @@ in the same entry, because a bridge change usually needs a matching extension
 change:
 
 - `dsh-browser-extension` — `extensions/dsh-browser`
-- `@yuxianglin/dsh-bridge-browser` — `packages/browser/bridge-browser`
+- `@dightendless/dsh-bridge-browser` — `packages/browser/bridge-browser`
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## Standalone fork release — 2026-10-10
+
+Distribution changes that make this tree installable on its own, without the
+upstream package it was forked from.
+
+### Changed
+
+- **The bridge package is now `@dightendless/dsh-bridge-browser`** (it was
+  `@yuxianglin/dsh-bridge-browser`). A profile that carried both this fork and
+  the upstream package would have resolved one dependency name twice, and the
+  second install would have replaced the first, so the fork takes a name of its
+  own. The plugin id (`bridge-browser`), every tool name, and the token file at
+  `~/.dsh/ext-bridge-token` are unchanged, so an installed extension keeps
+  working and needs no re-pairing.
+- **The installers fetch this fork.** `scripts/install.ps1` and
+  `scripts/install.sh` still download a source archive, build both packages,
+  register the bridge, and hand the extension to the browser; only the
+  repository they read from changed, so the advertised one-liner installs this
+  tree.
+- **`cordis.patch.yml` no longer uses the `!!js` tag.** The two
+  environment-driven config rows are still documented in the file as something
+  to add back deliberately; the shipped patch is plain YAML, so it also parses
+  in a standard YAML reader.
+
+### Added
+
+- **A `prepare` script in the bridge package.** A git install ships no build
+  output, so without it the profile installs the plugin and then fails to load
+  its entry point; `pnpm install` now builds the package itself.
+
+### Fixed
+
+- **The extension build died on Windows under Node 24.14.0.** Every vite target
+  printed its result, wrote its files, and then the process exited with
+  STATUS_STACK_BUFFER_OVERRUN, so a complete build was reported as a failure and
+  the release only had the first target's output. The build now starts vite
+  through Node's own entry point instead of the `node_modules/.bin` shell shim,
+  and separates that teardown crash from a real failure by whether the target
+  actually wrote output. A later Node release does not crash at all.
 
 ## Unreleased — 2026-10-10
 

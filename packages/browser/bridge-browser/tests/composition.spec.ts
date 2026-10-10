@@ -34,7 +34,7 @@ import * as BridgeBrowser from '../src/index.ts'
 import { BRIDGE_INJECT_BROWSER_SNAPSHOT_METHOD, BRIDGE_PATH, type BridgeFrame } from '../src/protocol.ts'
 import { BROWSER_CONTEXT_KIND } from '../src/browser-context.ts'
 
-const BRIDGE = '@yuxianglin/dsh-bridge-browser'
+const BRIDGE = '@dightendless/dsh-bridge-browser'
 const TOKEN = 'abcdabcdabcdabcdabcdabcdabcdabcd'
 
 let root: string | undefined

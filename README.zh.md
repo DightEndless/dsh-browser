@@ -166,9 +166,9 @@ pnpm run test
 pnpm run check:runtime
 pnpm run test:smoke
 
-pnpm --filter @yuxianglin/dsh-bridge-browser run build
-pnpm --filter @yuxianglin/dsh-bridge-browser run typecheck
-pnpm --filter @yuxianglin/dsh-bridge-browser run test
+pnpm --filter @dightendless/dsh-bridge-browser run build
+pnpm --filter @dightendless/dsh-bridge-browser run typecheck
+pnpm --filter @dightendless/dsh-bridge-browser run test
 
 pnpm --filter dsh-browser-extension run build
 pnpm --filter dsh-browser-extension run build:firefox
