@@ -1,7 +1,9 @@
 # dsh 浏览器操作
 
 > [!NOTE]
-> **本仓库是 [omdsh-dev/dsh-browser](https://github.com/omdsh-dev/dsh-browser) 的 fork**，作为独立项目维护。它补齐了上游没有的工具：视口与整页 `browser_screenshot`、`browser_hover`、`browser_click_at`、`browser_drag`、`browser_batch`、`browser_eval`、`browser_upload`、`browser_images`。桥接包使用独立的包名 `@dightendless/dsh-bridge-browser`，因此本 fork 与上游包可以同时存在于同一个 dsh profile 中，不会互相顶替。
+> **它操作的是你正在使用的 Chrome 或 Edge 标签页。** 扩展以「加载已解压」装入你自己的浏览器，所以不另开窗口、不用第二个 profile、也不需要打开调试端口——登录态、Cookie 与会话原样留在原处。
+>
+> **本仓库是 [omdsh-dev/dsh-browser](https://github.com/omdsh-dev/dsh-browser) 的 fork**，作为独立项目维护，补齐了上游没有的能力：视口与整页 `browser_screenshot`、`browser_hover`、`browser_click_at`、`browser_drag`、`browser_batch`、`browser_eval`、`browser_upload`、`browser_images`。桥接包使用独立的包名 `@dightendless/dsh-bridge-browser`，因此本 fork 与上游包可以同时存在于同一个 dsh profile 中，不会互相顶替。
 
 [English](README.md) | **中文**
 

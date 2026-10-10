@@ -1,7 +1,9 @@
 # dsh Browser Control
 
 > [!NOTE]
-> **This is a fork of [omdsh-dev/dsh-browser](https://github.com/omdsh-dev/dsh-browser)**, maintained as its own project. It adds tools upstream does not have: viewport and whole-page `browser_screenshot`, `browser_hover`, `browser_click_at`, `browser_drag`, `browser_batch`, `browser_eval`, `browser_upload`, and `browser_images`. Its bridge package is `@dightendless/dsh-bridge-browser` — a name of its own, so this fork and the upstream package can sit in one dsh profile without replacing each other.
+> **It operates the Chrome or Edge tab you are already using.** The extension loads unpacked into your own browser, so there is no second window, no separate profile, and no debug port to open — your logins, cookies, and session stay exactly where they are.
+>
+> **This is a fork of [omdsh-dev/dsh-browser](https://github.com/omdsh-dev/dsh-browser)**, maintained as its own project, that fills in what upstream lacks: viewport and whole-page `browser_screenshot`, `browser_hover`, `browser_click_at`, `browser_drag`, `browser_batch`, `browser_eval`, `browser_upload`, and `browser_images`. Its bridge package is `@dightendless/dsh-bridge-browser` — a name of its own, so this fork and the upstream package can sit in one dsh profile without replacing each other.
 
 **English** | [中文](README.zh.md)
 
