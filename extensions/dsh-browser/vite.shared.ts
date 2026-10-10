@@ -1,7 +1,8 @@
-import { copyFileSync, cpSync, mkdirSync } from 'node:fs'
+import { copyFileSync, mkdirSync } from 'node:fs'
 import { resolve } from 'node:path'
 import tsconfigPaths from 'vite-tsconfig-paths'
 import { defineConfig } from 'vite'
+import { copyTree } from './scripts/copy-tree.mjs'
 
 /**
  * Shared build plumbing for the extension's three targets (background ES
@@ -25,8 +26,11 @@ export const copyManifest = {
   closeBundle(): void {
     mkdirSync(outDir, { recursive: true })
     copyFileSync(resolve(import.meta.dirname, targetManifest), resolve(outDir, 'manifest.json'))
-    cpSync(resolve(import.meta.dirname, '_locales'), resolve(outDir, '_locales'), { recursive: true })
-    cpSync(resolve(import.meta.dirname, 'assets'), resolve(outDir, 'assets'), { recursive: true })
+    // Through copyTree, not fs.cpSync: the latter dies on this Node version when
+    // the destination path holds non-ASCII characters, which silently costs the
+    // build its icons and locale catalogs. See scripts/copy-tree.mjs.
+    copyTree(resolve(import.meta.dirname, '_locales'), resolve(outDir, '_locales'))
+    copyTree(resolve(import.meta.dirname, 'assets'), resolve(outDir, 'assets'))
   },
 }
 
