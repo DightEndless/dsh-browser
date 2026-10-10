@@ -203,5 +203,5 @@ upstream package it was forked from.
 
 ### Removed
 
-  build), and the `main-world` companion no longer rewrites `confirm`/`alert` on
-  trace of either.
+  longer rewrites `confirm`/`alert`. A build check confirms the packaged
+  extension contains no trace of either.
