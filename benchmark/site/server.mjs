@@ -1,4 +1,6 @@
 import { createServer } from 'node:http'
+import { resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { makeTaskInstance, TASK_IDS } from '../lib/tasks.mjs'
 
 function readJson(request) {
@@ -242,7 +244,10 @@ export async function startBenchmarkSite({ host = '127.0.0.1', port = 4173 } = {
   }
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+// Compare resolved paths, not `file://${process.argv[1]}`: that spelling only
+// matches on POSIX, because a Windows path is `C:\...` rather than `/...`, so
+// running this file directly never started the server on Windows.
+if (resolve(process.argv[1] ?? '') === fileURLToPath(import.meta.url)) {
   const port = Number(process.env.BENCHMARK_SITE_PORT ?? 4173)
   const site = await startBenchmarkSite({ port })
   console.log(`benchmark site listening on ${site.origin}`)
