@@ -200,8 +200,3 @@ upstream package it was forked from.
   snapshot).
 - The page-sharing privacy boundary still runs before any tab access; the new
   lock was moved behind it after the existing test caught the regression.
-
-### Removed
-
-  longer rewrites `confirm`/`alert`. A build check confirms the packaged
-  extension contains no trace of either.
