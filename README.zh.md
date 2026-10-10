@@ -1,4 +1,7 @@
-# dsh 浏览器操作 [![dshfind](https://dshfind.com/api/badge/Lum1104/dsh-browser?lang=zh)](https://dshfind.com/zh/plugins/Lum1104/dsh-browser?ref=badge)
+# dsh 浏览器操作
+
+> [!NOTE]
+> **本仓库是 [omdsh-dev/dsh-browser](https://github.com/omdsh-dev/dsh-browser) 的 fork**，作为独立项目维护。它补齐了上游没有的工具：视口与整页 `browser_screenshot`、`browser_hover`、`browser_click_at`、`browser_drag`、`browser_batch`、`browser_eval`、`browser_upload`、`browser_images`。桥接包使用独立的包名 `@dightendless/dsh-bridge-browser`，因此本 fork 与上游包可以同时存在于同一个 dsh profile 中，不会互相顶替。
 
 [English](README.md) | **中文**
 
@@ -8,35 +11,45 @@
 
 `dsh` 是由 DeepSeek AI 开发的开源、插件化 agent harness（智能体框架）。本仓库将配套的浏览器桥插件与 Chrome/Firefox MV3 扩展组成一个独立的 pnpm workspace。
 
-浏览器操作仍采用纯文本设计：页面会转换为结构化文本和带编号的交互元素清单，模型通过编号定位元素。dsh 0.2.0 的多模态对话走独立通道——宿主声明图片能力时，侧栏可发送 PNG、JPEG、WebP 和 GIF；浏览器工具本身仍不会截取页面截图。
+浏览器操作以文本为主：页面会转换为结构化文本和带编号的交互元素清单，模型通过编号定位元素。`browser_screenshot` 是唯一会返回图片的工具——它把截图存成本地文件，只把路径交给模型，因此页面通道依然保持文本形态。dsh 0.2.0 的多模态对话是另一条独立通道：宿主声明图片能力时，侧栏可发送 PNG、JPEG、WebP 和 GIF。
 
 > [!IMPORTANT]
 > 当前工作区固定使用 dsh 0.2.0-rc.2，也是最低支持版本；不再支持旧版 DSH。
 
 ## 快速安装
 
-本项目不能只使用标准的 `dsh plugin` 命令安装。它同时包含 dsh bridge plugin 和浏览器扩展。一行安装器目前会安装 Chrome 构建。
+有两条路径。本项目同时包含 dsh bridge plugin 和浏览器扩展，而扩展这一半在 Chrome 里只能以「加载已解压」的方式安装——浏览器不提供别的途径。
+
+**只装插件**（已预构建，无需构建步骤，也不需要 Git）：
+
+```sh
+dsh plugin --profile web add https://github.com/DightEndless/dsh-browser/releases/download/v0.2.0/dightendless-dsh-bridge-browser-0.2.0.tgz
+```
+
+**插件与扩展一起装**，用一行安装器：它会构建并注册桥插件、把 Chrome 扩展构建到 `~/.dsh/browser-extension`，然后打开 `chrome://extensions`：
 
 macOS 与 Linux：
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/Lum1104/dsh-browser/refs/heads/main/scripts/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/DightEndless/dsh-browser/refs/heads/main/scripts/install.sh | bash
 ```
 
 Windows（PowerShell）：
 
 ```powershell
-$s="$env:TEMP\dsh-install.ps1"; irm https://raw.githubusercontent.com/Lum1104/dsh-browser/refs/heads/main/scripts/install.ps1 -OutFile $s; powershell -NoProfile -ExecutionPolicy Bypass -File $s
+$s="$env:TEMP\dsh-install.ps1"; irm https://raw.githubusercontent.com/DightEndless/dsh-browser/refs/heads/main/scripts/install.ps1 -OutFile $s; powershell -NoProfile -ExecutionPolicy Bypass -File $s
 ```
 
 安装器打开 `chrome://extensions` 后，请按提示加载或重新加载 **dsh 浏览器助手**。如果 dsh 已经在运行，安装完成后请重启。前置要求、启动命令、更新方式和开发者安装详见[详细安装与使用](#详细安装与使用)。
 
+也可以从仓库源码安装插件——`dsh plugin --profile web add github:DightEndless/dsh-browser#path:/packages/browser/bridge-browser`——但该包会在安装时自行构建，而 pnpm 对 git 来源的包默认拒绝执行构建脚本，必须先手工加一条 `allowBuilds` 才会构建。上面的 release 资产没有这个问题，因为它已经是构建好的产物。
+
 > [!IMPORTANT]
-> npm 上未加 scope 的 [`dsh-browser`](https://www.npmjs.com/package/dsh-browser) 包属于另一个项目，与本仓库无关。本项目目前没有发布 npm 包，请使用上方安装器。
+> npm 上未加 scope 的 [`dsh-browser`](https://www.npmjs.com/package/dsh-browser) 包属于另一个项目，与本仓库无关。本 fork 同样没有发布 npm 包：上方的 release 资产是插件路径，上方的安装器则是会一并装好扩展的路径。
 
 ## 性能基准
 
-在 2026 年 8 月 18 日完成的 60 次配对端到端评测中，两个后端分配到的 30 次运行均全部成功；dsh 浏览器操作使用了更少的模型/工具轮次，并以更短时间完成任务：
+在 2026 年 8 月 18 日完成的 60 次配对端到端评测中（该评测在上游项目上测得，本 fork 与之共用同一套页面工具面），两个后端分配到的 30 次运行均全部成功；dsh 浏览器操作使用了更少的模型/工具轮次，并以更短时间完成任务：
 
 | 后端 | 成功率 | 平均端到端耗时 | 平均浏览器工具调用 |
 |---|---:|---:|---:|
@@ -81,7 +94,7 @@ scripts/install.ps1
 ## 为什么这样设计
 
 - **使用你的真实浏览器，而不是无头副本**：模型操作你已经打开的页面，登录态、会话和 Cookie 均会保留。
-- **纯文本页面接口**：编号控件、跨快照稳定 ID、delta 更新和敏感值掩码，使模型无需截图也能操作页面；用户主动添加的对话图片走 dsh 独立的多模态消息通道。
+- **以文本为主的页面接口**：编号控件、跨快照稳定 ID、delta 更新和敏感值掩码，使模型无需截图也能操作页面；用户主动添加的对话图片走 dsh 独立的多模态消息通道。
 - **用「指」代替「描述」**：直接划选你要问的那段文字，侧栏会把它引用下来，说「解释这个」不必再描述整页内容。只有侧栏打开时才会捕获，并且在你发送消息之前不会离开浏览器。
 - **收窄隐私边界**：密码和支付卡字段始终显示为 `••••`，字段值不会离开页面。
 - **受保护的桥连接**：远程连接使用认证握手，特权网关方法拒绝非回环调用方，扩展把工具绑定到一个由用户控制的标签页。
@@ -95,16 +108,16 @@ scripts/install.ps1
 托管安装请运行：
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/Lum1104/dsh-browser/refs/heads/main/scripts/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/DightEndless/dsh-browser/refs/heads/main/scripts/install.sh | bash
 ```
 
 Windows 请运行：
 
 ```powershell
-$s="$env:TEMP\dsh-install.ps1"; irm https://raw.githubusercontent.com/Lum1104/dsh-browser/refs/heads/main/scripts/install.ps1 -OutFile $s; powershell -NoProfile -ExecutionPolicy Bypass -File $s
+$s="$env:TEMP\dsh-install.ps1"; irm https://raw.githubusercontent.com/DightEndless/dsh-browser/refs/heads/main/scripts/install.ps1 -OutFile $s; powershell -NoProfile -ExecutionPolicy Bypass -File $s
 ```
 
-安装器会下载 `main`、构建并注册桥插件、把 Chrome 扩展构建到 `~/.dsh/browser-extension`，然后打开 `chrome://extensions`。首次安装时，请把该目录作为已解压扩展加载；更新时点击**重新加载**。如果 dsh 已在运行，请重启。
+安装器会下载本仓库的默认分支、构建并注册桥插件、把 Chrome 扩展构建到 `~/.dsh/browser-extension`，然后打开 `chrome://extensions`。首次安装时，请把该目录作为已解压扩展加载；更新时点击**重新加载**。如果 dsh 已在运行，请重启。
 
 `scripts/install.sh` 覆盖 macOS 与 Linux，`scripts/install.ps1` 覆盖 Windows；两者写入同一个托管工作区和同一份安装元数据。当系统提供剪贴板工具（`pbcopy`、`wl-copy`、`xclip`、`xsel` 或 PowerShell 的 `Set-Clipboard`）时，安装器会把扩展路径复制到剪贴板；无论是否复制成功都会打印该路径。若未检测到 Chrome/Chromium，安装器会打印对应的安装命令；设置 `DSH_INSTALL_BROWSER=1` 可让安装器尝试自动安装。
 
@@ -113,7 +126,7 @@ Windows 命令先下载 `install.ps1` 再执行，而不是管道给 `Invoke-Exp
 如需从源码 checkout 安装当前分支：
 
 ```sh
-git clone https://github.com/Lum1104/dsh-browser.git
+git clone https://github.com/DightEndless/dsh-browser.git
 cd dsh-browser
 ./scripts/install.sh
 ```
@@ -190,7 +203,7 @@ pnpm --filter dsh-browser-extension run test
 - 桥路径在 `/api` 信任栅栏之外，自带 bearer token 认证。
 - Chrome 扩展的本地 Origin 保留零配置回环访问；Firefox Origin 是每次安装生成的 UUID，必须携带 bearer token。
 - 特权网关方法（`settings.*`/`credentials.*`/`host.open*`）对非回环来源一律拒绝。
-- 单活动连接；浏览器页面管线为纯文本且不截图；用户主动添加的对话图片交给 dsh 持久附件服务，密码和卡号值永不回传。
+- 单活动连接；浏览器页面管线默认以结构化文本呈现，`browser_screenshot` 是唯一会返回图片的浏览器工具：截图落到本地文件，模型拿到的是该路径，而不是内联像素。用户主动添加的对话图片交给 dsh 持久附件服务，密码和卡号值永不回传。
 - 助手开始工作时会绑定当时的活动标签页（提交提示时绑定；直接调用浏览器工具时则在首次调用绑定）。用户手动切页后，后续浏览器操作会暂停，侧栏会询问让助手继续原页面还是跟随新页面；选择原页面后允许在后台继续，但扩展绝不静默改绑或切换用户正在看的页面。受控标签页关闭后也会暂停，直到用户显式选择当前页。
 - 只有在侧栏打开、且页面共享不是「关闭」时才会捕获划选内容，密码和卡号字段永不读取。内容在发送之前始终留在扩展内部；移除、页面跳转或标签页关闭都会丢弃它；发送时与页面快照一样包在不可信内容边界内，来源标题和 URL 同样由页面提供，因此也放在边界之内。
 - 网页文字会标记为不可信输入。默认「自动共享」只按需读取受控标签页且不额外弹窗；对隐私敏感时可选择「每次询问」，或用「关闭」完全阻断读取。在「每次询问」模式下，读取弹窗可以仅允许一次，也可以持久切回自动读取；之后仍可在设置中关闭。读取的页面文字会发送给当前选择的模型。

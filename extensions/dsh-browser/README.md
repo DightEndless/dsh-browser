@@ -2,9 +2,11 @@
 
 English | [中文](README.zh.md)
 
+This extension is part of the [`DightEndless/dsh-browser`](https://github.com/DightEndless/dsh-browser) fork of [`omdsh-dev/dsh-browser`](https://github.com/omdsh-dev/dsh-browser), and talks to the bridge package `@dightendless/dsh-bridge-browser`.
+
 The **browser-operation end** of dsh: the model reads and operates the browser page you have open — extract content, click elements, fill forms, scroll, and navigate, all in the real page with your login state preserved. The side panel is the conversation entry.
 
-**Two explicit channels**: browser pages are still rendered as structured text (a numbered interactive-element inventory), so browser tools never take screenshots. Separately, a dsh 0.1.2 host can advertise multimodal image limits; the side panel then accepts PNG, JPEG, WebP, and GIF attachments and renders their durable history references.
+**Two explicit channels**: browser pages are rendered as structured text (a numbered interactive-element inventory) by default, and `browser_screenshot` is the one tool that returns an image — the capture is saved to a local file and the model is given its path, so the page surface stays text. Separately, a dsh 0.1.2 host can advertise multimodal image limits; the side panel then accepts PNG, JPEG, WebP, and GIF attachments and renders their durable history references.
 
 ## What the model can do
 
@@ -63,13 +65,13 @@ The recommended zero-configuration command does not require Git or a local clone
 1. **Build and install the extension**:
 
    ```sh
-   curl -fsSL https://raw.githubusercontent.com/Lum1104/dsh-browser/refs/heads/main/scripts/install.sh | bash
+   curl -fsSL https://raw.githubusercontent.com/DightEndless/dsh-browser/refs/heads/main/scripts/install.sh | bash
    ```
 
    On Windows, run this in PowerShell instead:
 
    ```powershell
-   $s="$env:TEMP\dsh-install.ps1"; irm https://raw.githubusercontent.com/Lum1104/dsh-browser/refs/heads/main/scripts/install.ps1 -OutFile $s; powershell -NoProfile -ExecutionPolicy Bypass -File $s
+   $s="$env:TEMP\dsh-install.ps1"; irm https://raw.githubusercontent.com/DightEndless/dsh-browser/refs/heads/main/scripts/install.ps1 -OutFile $s; powershell -NoProfile -ExecutionPolicy Bypass -File $s
    ```
 
    The script downloads a managed workspace to `~/.dsh/dsh-browser`, builds the bridge plugin, registers its official bundle in the local dsh `web` profile, builds the extension, copies the output to the stable directory `~/.dsh/browser-extension`, and opens `chrome://extensions`. Enable Developer mode, choose Load unpacked, and select the extension directory. Running the command again updates the managed installation.
@@ -77,7 +79,7 @@ The recommended zero-configuration command does not require Git or a local clone
    A cloned checkout uses the same installer without downloading or overwriting source files:
 
    ```sh
-   git clone https://github.com/Lum1104/dsh-browser.git
+   git clone https://github.com/DightEndless/dsh-browser.git
    cd dsh-browser
    ./scripts/install.sh
    ```
@@ -110,7 +112,7 @@ Pages that were already open before extension installation or reload are instrum
 
 For extension-only development, load `extensions/dsh-browser/dist/` from `chrome://extensions`, or run `build:firefox` and load `extensions/dsh-browser/dist-firefox/manifest.json` from `about:debugging#/runtime/this-firefox`. Rebuild and reload after code changes.
 
-## Why browser operation stays text-only
+## Why browser operation stays text-first
 
 - **Snapshot as the view**: the model's entire view of the page is structured text (title/URL/main/numbered elements/forms), budgeted at 32k chars by default (plugin-configurable, negotiated to the extension via `hello.ok`).
 - **Page text is untrusted input**: snapshots and targeted text reads are enclosed in a fresh nonce-bound trust marker and explicitly tell the model never to treat page-authored commands as instructions. This is defense in depth; extension-side action approval is the enforcement boundary.

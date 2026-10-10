@@ -2,9 +2,11 @@
 
 [English](README.md) | 中文
 
+本扩展是 [`DightEndless/dsh-browser`](https://github.com/DightEndless/dsh-browser)（[`omdsh-dev/dsh-browser`](https://github.com/omdsh-dev/dsh-browser) 的 fork）的一部分，对接的桥接包是 `@dightendless/dsh-bridge-browser`。
+
 dsh 的**浏览器操作端**：让模型直接读取并操作你在浏览器里打开的页面——抓取内容、点击元素、填写表单、滚动与导航，全部在真实页面执行、登录态保留。侧边栏面板是与模型对话的入口。
 
-**两条明确分离的通道**：浏览器页面仍以结构化文本呈现（带编号的交互元素清单），浏览器工具不会截图；另一方面，dsh 0.1.2 宿主可声明多模态图片限制，侧栏据此接收 PNG、JPEG、WebP 和 GIF，并渲染会话中的持久图片附件。
+**两条明确分离的通道**：浏览器页面默认以结构化文本呈现（带编号的交互元素清单），而 `browser_screenshot` 是唯一会返回图片的工具——截图存成本地文件，只把路径交给模型，因此页面交互面依然保持文本形态。另一方面，dsh 0.1.2 宿主可声明多模态图片限制，侧栏据此接收 PNG、JPEG、WebP 和 GIF，并渲染会话中的持久图片附件。
 
 ## 模型能做什么
 
@@ -63,13 +65,13 @@ pnpm --filter dsh-browser-extension run test
 1. **构建并安装扩展**：
 
    ```sh
-   curl -fsSL https://raw.githubusercontent.com/Lum1104/dsh-browser/refs/heads/main/scripts/install.sh | bash
+   curl -fsSL https://raw.githubusercontent.com/DightEndless/dsh-browser/refs/heads/main/scripts/install.sh | bash
    ```
 
    Windows 请改在 PowerShell 中运行：
 
    ```powershell
-   $s="$env:TEMP\dsh-install.ps1"; irm https://raw.githubusercontent.com/Lum1104/dsh-browser/refs/heads/main/scripts/install.ps1 -OutFile $s; powershell -NoProfile -ExecutionPolicy Bypass -File $s
+   $s="$env:TEMP\dsh-install.ps1"; irm https://raw.githubusercontent.com/DightEndless/dsh-browser/refs/heads/main/scripts/install.ps1 -OutFile $s; powershell -NoProfile -ExecutionPolicy Bypass -File $s
    ```
 
    脚本会把托管 workspace 下载到 `~/.dsh/dsh-browser`，构建桥插件，把它的官方 bundle 注册到本机 dsh 的 `web` profile，再构建扩展并把产物复制到稳定目录 `~/.dsh/browser-extension`，然后打开 `chrome://extensions`。开启开发者模式，选择「加载已解压的扩展程序」，加载扩展目录。再次运行该命令会更新托管安装。
@@ -77,7 +79,7 @@ pnpm --filter dsh-browser-extension run test
    clone 得到的 checkout 也使用同一个安装器，而且不会下载或覆盖源码：
 
    ```sh
-   git clone https://github.com/Lum1104/dsh-browser.git
+   git clone https://github.com/DightEndless/dsh-browser.git
    cd dsh-browser
    ./scripts/install.sh
    ```
@@ -110,7 +112,7 @@ pnpm --filter dsh-browser-extension run test
 
 如果只开发扩展，Chrome 从 `chrome://extensions` 加载 `extensions/dsh-browser/dist/`；Firefox 运行 `build:firefox` 后，从 `about:debugging#/runtime/this-firefox` 加载 `extensions/dsh-browser/dist-firefox/manifest.json`。代码更新后需重新构建并重新加载。
 
-## 为什么浏览器操作仍采用纯文本
+## 为什么浏览器操作以文本为主
 
 - **快照即视图**：模型对页面的全部认知 = 结构化文本（标题/URL/正文/编号元素/表单），默认预算 32k 字符（插件可配，经 `hello.ok` 协商给扩展）。
 - **页面文字是不可信输入**：快照和局部文本读取会放进带随机 nonce 的信任边界，并明确要求模型不得把网页中的命令当成指令。这只是纵深防御；扩展侧的操作审批才是强制安全边界。
