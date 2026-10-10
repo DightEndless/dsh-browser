@@ -5,7 +5,9 @@
 
 **English** | [中文](README.zh.md)
 
-<img width="1701" height="897" alt="dsh Browser Control" src="https://github.com/user-attachments/assets/3b1f3a25-f962-4e02-a9ef-d23e0d01fc8e" />
+<img width="1672" alt="dsh Browser Control: the tools this fork adds, arranged around a browser window with a numbered element list and the side panel" src="packages/browser/bridge-browser/assets/screenshots/cover.png" />
+
+<img width="1672" alt="A page being read with the side panel connected beside it" src="packages/browser/bridge-browser/assets/screenshots/browser-and-panel.png" />
 
 Connect [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) to the Chrome or Firefox tabs you are already using. The model can read page content, operate controls, navigate, and manage tabs while preserving your login state, session, and cookies. A side panel or sidebar provides the conversation UI.
 

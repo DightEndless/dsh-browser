@@ -5,7 +5,9 @@
 
 [English](README.md) | **中文**
 
-<img width="1701" height="897" alt="dsh 浏览器操作" src="https://github.com/user-attachments/assets/3b1f3a25-f962-4e02-a9ef-d23e0d01fc8e" />
+<img width="1672" alt="dsh 浏览器操作：本 fork 新增的工具，围绕一台带有编号元素清单与侧边栏的浏览器窗口排布" src="packages/browser/bridge-browser/assets/screenshots/cover.png" />
+
+<img width="1672" alt="侧边栏已连接，正在读取一个页面" src="packages/browser/bridge-browser/assets/screenshots/browser-and-panel.png" />
 
 把 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 连接到你正在使用的 Chrome 或 Firefox 标签页。模型可以读取页面内容、操作控件、导航和管理标签页，同时保留登录态、会话和 Cookie。侧边栏提供对话界面。
 
