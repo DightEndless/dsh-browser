@@ -22,8 +22,45 @@ let budget: SnapshotBudget = { maxItems: 60, maxForms: 30, maxChars: DEFAULT_SNA
 const ids = new ElementIds()
 let selectionWatchCommandReceived = false
 
+/**
+ * Whether the copy of this script still belongs to a live extension context.
+ *
+ * Reloading an unpacked extension orphans the content script that is already
+ * running in every open tab: its `chrome.runtime` is dead, and calling into it
+ * throws "Extension context invalidated" *synchronously*, which a `.catch()` on
+ * the returned promise never sees. The throw then lands in the extension's error
+ * list for a tab the user is not even looking at.
+ */
+function contextAlive(): boolean {
+  try {
+    return chrome.runtime?.id !== undefined
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Send one runtime message, tolerating a context that is already gone.
+ * @param message - message payload.
+ * @returns the reply promise, or undefined when there is nobody left to ask.
+ */
+function sendToRuntime(message: unknown): Promise<unknown> | undefined {
+  if (!contextAlive()) return undefined
+  try {
+    return chrome.runtime.sendMessage(message)
+  } catch {
+    return undefined
+  }
+}
+
 const selectionWatcher = new SelectionWatcher((selection) => {
-  void chrome.runtime.sendMessage({ type: 'DSH_SELECTION', selection }).catch(() => {})
+  const reply = sendToRuntime({ type: 'DSH_SELECTION', selection })
+  if (reply === undefined) {
+    // Orphaned by a reload: stop listening rather than throwing on every change.
+    selectionWatcher.dispose()
+    return
+  }
+  void reply.catch(() => {})
 })
 
 const CONTENT_SCRIPT_LISTENER = '__dshBrowserContentScriptListener__'
@@ -108,12 +145,15 @@ contentGlobal[CONTENT_SELECTION_WATCHER] = selectionWatcher
 // that resolves a snapshot index to a point reads it from here instead of from
 // the page-writable `data-dsh-el` attribute.
 ;(globalThis as Record<string, unknown>)[ELEMENT_IDS_GLOBAL] = ids
-chrome.runtime.onMessage.addListener(onMessage)
-
+try {
+  chrome.runtime.onMessage.addListener(onMessage)
+} catch {
+  // The context went away before this script finished loading.
+}
 // A navigation action answers before unloading. The replacement content
 // script announces when the new document can accept its automatic snapshot,
 // and learns from the reply whether a side panel wants selection reports.
-void chrome.runtime.sendMessage({ type: 'DSH_CONTENT_READY' }).then((response: unknown) => {
+void sendToRuntime({ type: 'DSH_CONTENT_READY' })?.then((response: unknown) => {
   if (selectionWatchCommandReceived || contentGlobal[CONTENT_SELECTION_WATCHER] !== selectionWatcher) return
   if (typeof response !== 'object' || response === null) return
   const ready = response as {

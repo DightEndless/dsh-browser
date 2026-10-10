@@ -822,7 +822,10 @@ describe('dispatchToolCall', () => {
       async () => 'approved' as const,
     )
 
-    const text = (answer.result as { text: string }).text
+    // A failed step makes the batch itself a failure; the report travels in the
+    // message so the caller still sees which step failed and what the page said.
+    const text = answer.error?.message ?? ''
+    expect(answer.ok).toBe(false)
     expect(text).toContain('Ran 1 of 3 actions')
     expect(text).toContain('nothing is focused')
     expect(chromeMock.sendMessage.mock.calls.map((call) => (call[1] as { action: string }).action))

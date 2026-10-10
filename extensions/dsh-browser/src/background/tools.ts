@@ -1021,9 +1021,15 @@ async function dispatchBatch(
       parts.push('', 'The page could not be read back after the batch; call browser_snapshot.')
     }
   }
-  // The report itself was produced, so the call answers ok even when a step
-  // failed: the text carries the per-step outcome the model needs to react.
-  return { ok: true, result: { text: parts.join('\n') } }
+  const report = parts.join('\n')
+  // A step that failed makes the whole call a failure. Answering ok here showed a
+  // broken batch as a success to the harness and to anyone watching the panel,
+  // while every other tool reports its own failure; the per-step report travels
+  // in the message either way, so the model still sees which step failed and
+  // what the page said about it.
+  return failedAt === undefined
+    ? { ok: true, result: { text: report } }
+    : { ok: false, error: { code: 'action-failed', message: report } }
 }
 
 function cancelled(): ToolAnswer {

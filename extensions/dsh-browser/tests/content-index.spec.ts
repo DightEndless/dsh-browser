@@ -20,7 +20,7 @@ describe('content script registration', () => {
     const removeListener = vi.fn()
     const sendMessage = vi.fn(async () => undefined)
     vi.stubGlobal('chrome', {
-      runtime: { onMessage: { addListener, removeListener }, sendMessage },
+      runtime: { id: 'test-extension', onMessage: { addListener, removeListener }, sendMessage },
     })
 
     await import('../src/content/index.ts')
@@ -37,6 +37,20 @@ describe('content script registration', () => {
     expect(sendMessage).toHaveBeenCalledTimes(2)
     expect(sendMessage).toHaveBeenLastCalledWith({ type: 'DSH_CONTENT_READY' })
   })
+
+  it('stays quiet when the extension context is already gone', async () => {
+    // What a reload leaves behind in every open tab: `chrome.runtime` is still an
+    // object but has no id, and calling into it throws synchronously — which is
+    // how "Extension context invalidated" ended up in the extension's error list.
+    const sendMessage = vi.fn()
+    vi.stubGlobal('chrome', {
+      runtime: { onMessage: { addListener: vi.fn(), removeListener: vi.fn() }, sendMessage },
+    })
+
+    await import('../src/content/index.ts')
+
+    expect(sendMessage).not.toHaveBeenCalled()
+  })
 })
 
 describe('selection watch arming', () => {
@@ -49,7 +63,9 @@ describe('selection watch arming', () => {
     const sendMessage = vi.fn(async (message: { type: string }) =>
       message.type === 'DSH_CONTENT_READY' ? readyResponse : undefined)
     vi.stubGlobal('chrome', {
-      runtime: { onMessage: { addListener: vi.fn(), removeListener: vi.fn() }, sendMessage },
+      // `id` is what tells the script its extension context is still alive; a
+      // real content script always has one.
+      runtime: { id: 'test-extension', onMessage: { addListener: vi.fn(), removeListener: vi.fn() }, sendMessage },
     })
     // Each import starts without a pre-existing highlight unless the test
     // explicitly installs one. Other tests replace this writable JSDOM method.
