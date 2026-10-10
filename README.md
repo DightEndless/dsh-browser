@@ -18,15 +18,21 @@ Browser operation is text-first: pages become structured text with a numbered in
 
 ## Quick install
 
-Two routes. The integration contains both a dsh bridge plugin and a browser extension, and the extension half is always loaded unpacked in Chrome, which allows no other way.
+Three routes. The integration contains both a dsh bridge plugin and a browser extension, and the extension half is always loaded unpacked in Chrome, which allows no other way — so unless you use the installer, the two halves are installed separately.
 
-**Plugin only**, prebuilt, with no build step and no Git:
+**1. Plugin only**, prebuilt, with no build step and no Git:
 
 ```sh
 dsh plugin --profile web add https://github.com/DightEndless/dsh-browser/releases/download/v0.2.0/dightendless-dsh-bridge-browser-0.2.0.tgz
 ```
 
-**Plugin and extension together**, through the one-line installer, which builds and registers the bridge plugin, builds the Chrome extension into `~/.dsh/browser-extension`, and opens `chrome://extensions`:
+**2. Extension only**, prebuilt: download
+[`dsh-browser-extension-0.3.0.zip`](https://github.com/DightEndless/dsh-browser/releases/download/v0.2.0/dsh-browser-extension-0.3.0.zip),
+unzip it, then open `chrome://extensions` (Edge: `edge://extensions`), turn on **Developer mode**, choose **Load unpacked**, and select the folder that came out of the zip.
+
+Routes 1 and 2 together are the whole product, and neither needs Node, pnpm, or Git.
+
+**3. Both halves**, through the one-line installer, which builds and registers the bridge plugin, builds the Chrome extension into `~/.dsh/browser-extension`, and opens `chrome://extensions`:
 
 macOS and Linux:
 
@@ -40,12 +46,14 @@ Windows, in PowerShell:
 $s="$env:TEMP\dsh-install.ps1"; irm https://raw.githubusercontent.com/DightEndless/dsh-browser/refs/heads/main/scripts/install.ps1 -OutFile $s; powershell -NoProfile -ExecutionPolicy Bypass -File $s
 ```
 
-When the installer opens `chrome://extensions`, follow its instructions to load or reload **dsh Browser Assistant**. If dsh is already running, restart it after installation. See [Detailed installation and usage](#detailed-installation-and-usage) for prerequisites, startup commands, updates, and developer installation.
+This route needs Node.js 22+ and pnpm, because it builds both halves from source.
 
-Installing the plugin from repository source also works — `dsh plugin --profile web add github:DightEndless/dsh-browser#path:/packages/browser/bridge-browser` — but that package builds itself on install, and pnpm refuses to run build scripts for a git-hosted package until it is allowlisted, so this route needs a manual `allowBuilds` entry first. The release asset above needs none, because it ships already built.
+Whichever route you take, load or reload **dsh Browser Assistant** on the browser's extension page, and restart dsh if it is already running. See [Detailed installation and usage](#detailed-installation-and-usage) for prerequisites, startup commands, updates, and developer installation.
+
+Installing the plugin from repository source also works — `dsh plugin --profile web add github:DightEndless/dsh-browser#path:/packages/browser/bridge-browser` — but that package builds itself on install, and pnpm refuses to run build scripts for a git-hosted package until it is allowlisted, so this route needs a manual `allowBuilds` entry first. The release assets above need none, because they ship already built.
 
 > [!IMPORTANT]
-> The unscoped [`dsh-browser`](https://www.npmjs.com/package/dsh-browser) package on npm belongs to a different project and is not affiliated with this repository. This fork is not published on npm either: the prebuilt release asset above is the plugin route, and the installer above is the route that also sets up the extension.
+> The unscoped [`dsh-browser`](https://www.npmjs.com/package/dsh-browser) package on npm belongs to a different project and is not affiliated with this repository. This fork is not published on npm either: the prebuilt release assets above are the install, and the installer is the one-command alternative.
 
 ## Performance
 

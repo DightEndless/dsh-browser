@@ -18,15 +18,22 @@
 
 ## 快速安装
 
-有两条路径。本项目同时包含 dsh bridge plugin 和浏览器扩展，而扩展这一半在 Chrome 里只能以「加载已解压」的方式安装——浏览器不提供别的途径。
+有三条路线。本项目同时包含 dsh bridge plugin 和浏览器扩展，而扩展这一半在 Chrome 里只能以「加载已解压」的方式安装——浏览器不提供别的途径。所以除非用安装器，两半是分开装的。
 
-**只装插件**（已预构建，无需构建步骤，也不需要 Git）：
+**1. 只装插件**（已预构建，无需构建步骤，也不需要 Git）：
 
 ```sh
 dsh plugin --profile web add https://github.com/DightEndless/dsh-browser/releases/download/v0.2.0/dightendless-dsh-bridge-browser-0.2.0.tgz
 ```
 
-**插件与扩展一起装**，用一行安装器：它会构建并注册桥插件、把 Chrome 扩展构建到 `~/.dsh/browser-extension`，然后打开 `chrome://extensions`：
+**2. 只装扩展**（已预构建）：下载
+[`dsh-browser-extension-0.3.0.zip`](https://github.com/DightEndless/dsh-browser/releases/download/v0.2.0/dsh-browser-extension-0.3.0.zip)，
+解压后打开 `chrome://extensions`（Edge 是 `edge://extensions`），开启右上角**开发者模式**，点
+**加载已解压的扩展程序**，选中解压出来的那个文件夹。
+
+路线 1 加路线 2 就是完整安装，而且**都不需要 Node、pnpm 或 Git**。
+
+**3. 两半一起装**，用一行安装器：它会构建并注册桥插件、把 Chrome 扩展构建到 `~/.dsh/browser-extension`，然后打开 `chrome://extensions`：
 
 macOS 与 Linux：
 
@@ -40,12 +47,14 @@ Windows（PowerShell）：
 $s="$env:TEMP\dsh-install.ps1"; irm https://raw.githubusercontent.com/DightEndless/dsh-browser/refs/heads/main/scripts/install.ps1 -OutFile $s; powershell -NoProfile -ExecutionPolicy Bypass -File $s
 ```
 
-安装器打开 `chrome://extensions` 后，请按提示加载或重新加载 **dsh 浏览器助手**。如果 dsh 已经在运行，安装完成后请重启。前置要求、启动命令、更新方式和开发者安装详见[详细安装与使用](#详细安装与使用)。
+这条路线需要 Node.js 22+ 与 pnpm，因为它要从源码构建两半。
 
-也可以从仓库源码安装插件——`dsh plugin --profile web add github:DightEndless/dsh-browser#path:/packages/browser/bridge-browser`——但该包会在安装时自行构建，而 pnpm 对 git 来源的包默认拒绝执行构建脚本，必须先手工加一条 `allowBuilds` 才会构建。上面的 release 资产没有这个问题，因为它已经是构建好的产物。
+无论走哪条路线，最后都在浏览器扩展页面里加载或重新加载 **dsh 浏览器助手**；如果 dsh 已经在运行，装完请重启。前置要求、启动命令、更新方式和开发者安装详见[详细安装与使用](#详细安装与使用)。
+
+也可以从仓库源码安装插件——`dsh plugin --profile web add github:DightEndless/dsh-browser#path:/packages/browser/bridge-browser`——但该包会在安装时自行构建，而 pnpm 对 git 来源的包默认拒绝执行构建脚本，必须先手工加一条 `allowBuilds` 才会构建。上面的 release 资产没有这个问题，因为它们已经是构建好的产物。
 
 > [!IMPORTANT]
-> npm 上未加 scope 的 [`dsh-browser`](https://www.npmjs.com/package/dsh-browser) 包属于另一个项目，与本仓库无关。本 fork 同样没有发布 npm 包：上方的 release 资产是插件路径，上方的安装器则是会一并装好扩展的路径。
+> npm 上未加 scope 的 [`dsh-browser`](https://www.npmjs.com/package/dsh-browser) 包属于另一个项目，与本仓库无关。本 fork 同样没有发布 npm 包：上方的预构建资产就是安装方式，安装器则是"一条命令装齐"的替代方案。
 
 ## 性能基准
 
