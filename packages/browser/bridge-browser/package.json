@@ -108,7 +108,6 @@
     "ws": "^8.21.0"
   },
   "scripts": {
-    "prepare": "pnpm run build",
     "test": "vitest run",
     "typecheck": "tsc -b --pretty false",
     "build": "tsc -b --pretty false && tsdown && node -e \"require('node:fs').copyFileSync('src/client.js', 'lib/client.js')\""

@@ -3,6 +3,22 @@ node_modules/
 **/lib/
 !benchmark/lib/
 !benchmark/lib/**
+# The bridge package's built entry points and type declarations are committed on
+# purpose, and only those: a git-based install (a pinned-commit marketplace, a
+# `github:` dependency) then needs no lifecycle script, and the repository holds
+# the same bytes the published tarball ships.
+!packages/browser/bridge-browser/lib/
+!packages/browser/bridge-browser/lib/client.js
+!packages/browser/bridge-browser/lib/index.js
+!packages/browser/bridge-browser/lib/invariant.js
+!packages/browser/bridge-browser/lib/protocol.js
+!packages/browser/bridge-browser/lib/types/
+!packages/browser/bridge-browser/lib/types/*.d.ts
+# ...but not the compiler intermediates that live in those same directories.
+packages/browser/bridge-browser/lib/*.map
+packages/browser/bridge-browser/lib/tsconfig.tsbuildinfo
+packages/browser/bridge-browser/lib/types/*.js
+packages/browser/bridge-browser/lib/types/*.map
 **/dist/
 **/dist-firefox/
 
