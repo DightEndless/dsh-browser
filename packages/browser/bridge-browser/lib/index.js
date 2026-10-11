@@ -7,7 +7,7 @@ import { chmod, lstat, mkdir, readFile, readdir, rename, rm, writeFile } from "n
 import path, { dirname, join, resolve } from "node:path";
 import { createUserMessage } from "@deepseek-ai/dsh-llm";
 import { defineTool } from "@deepseek-ai/dsh-tools";
-import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 //#region lib/types/session-purge.js
 /**
@@ -2843,6 +2843,31 @@ function defaultExtensionTargetDir() {
 	return dshHomePath("browser-extension");
 }
 /**
+* Prune entries in target directory that no longer exist in source directory.
+* Best-effort: catches filesystem errors without failing the overall update.
+*/
+function pruneStaleEntries(target, source) {
+	if (!existsSync(target)) return;
+	for (const entry of readdirSync(target, { withFileTypes: true })) {
+		if (entry.name === ".dsh-extension-version") continue;
+		const src = join(source, entry.name);
+		const dst = join(target, entry.name);
+		if (!existsSync(src)) try {
+			rmSync(dst, {
+				recursive: true,
+				force: true
+			});
+		} catch {}
+		else if (entry.isDirectory()) try {
+			if (!statSync(src).isDirectory()) rmSync(dst, {
+				recursive: true,
+				force: true
+			});
+			else pruneStaleEntries(dst, src);
+		} catch {}
+	}
+}
+/**
 * Recursively copy directory tree using mkdirSync and copyFileSync.
 * Avoids fs.cpSync due to Node 24 Windows non-ASCII path crash (STATUS_STACK_BUFFER_OVERRUN).
 */
@@ -2878,7 +2903,8 @@ function releasePackagedExtension(options = {}) {
 	let version = "unknown";
 	try {
 		const manifest = JSON.parse(readFileSync(join(sourceDir, "manifest.json"), "utf8"));
-		if (typeof manifest.version === "string" && manifest.version.length > 0) version = manifest.version;
+		if (typeof manifest.version === "string" && manifest.version.trim().length > 0) version = manifest.version.trim();
+		else throw new Error("manifest.json does not contain a valid version string");
 	} catch (err) {
 		const error = `Failed to read bundled extension manifest: ${err.message}`;
 		logger?.warn?.(`browser bridge: ${error}`);
@@ -2886,14 +2912,16 @@ function releasePackagedExtension(options = {}) {
 			status: "failed",
 			sourceDir,
 			targetDir,
-			version,
+			version: "unknown",
 			error
 		};
 	}
 	const versionFile = join(targetDir, EXTENSION_VERSION_FILE);
 	const targetManifest = join(targetDir, "manifest.json");
 	if (existsSync(versionFile) && existsSync(targetManifest)) try {
-		if (readFileSync(versionFile, "utf8").trim() === version) return {
+		const existingVersion = readFileSync(versionFile, "utf8").trim();
+		const targetManifestData = JSON.parse(readFileSync(targetManifest, "utf8"));
+		if (existingVersion === version && targetManifestData?.version === version) return {
 			status: "up-to-date",
 			sourceDir,
 			targetDir,
@@ -2902,6 +2930,7 @@ function releasePackagedExtension(options = {}) {
 	} catch {}
 	try {
 		mkdirSync(targetDir, { recursive: true });
+		pruneStaleEntries(targetDir, sourceDir);
 		copyTree(sourceDir, targetDir);
 		writeFileSync(versionFile, `${version}\n`, "utf8");
 		return {
@@ -3085,6 +3114,7 @@ function mountBridge(ctx, resolved, tokenRes, hostApi, extensionRelease) {
 				...extensionRelease ? {
 					extensionPath: extensionRelease.targetDir,
 					extensionStatus: extensionRelease.status,
+					extensionManualPath: extensionRelease.sourceDir,
 					...extensionRelease.error ? { extensionError: extensionRelease.error } : {}
 				} : {}
 			}));

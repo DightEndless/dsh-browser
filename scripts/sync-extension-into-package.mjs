@@ -52,7 +52,7 @@ export function syncExtension(source = sourceDir, target = targetDir) {
   return { copiedCount, target }
 }
 
-if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+if (process.argv[1] && resolve(process.argv[1]).toLowerCase() === fileURLToPath(import.meta.url).toLowerCase()) {
   const result = syncExtension()
   console.log(`Synced ${result.copiedCount} extension files to ${result.target}`)
 }

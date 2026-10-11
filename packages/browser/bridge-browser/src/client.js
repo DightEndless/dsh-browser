@@ -28,6 +28,7 @@ window.__ModuleLoader__.load({
 
         'extensionInstall.title': '浏览器扩展快速安装',
         'extensionInstall.help': '插件已将浏览器助手释放到本地目录，在浏览器中四步即可完成加载：',
+        'extensionInstall.manualHelp': '自动释放到标准目录失败。已降级为包内内置目录，在浏览器中四步即可完成加载：',
         'extensionInstall.step1': '1. 在浏览器地址栏打开 chrome://extensions（Edge 打开 edge://extensions）',
         'extensionInstall.step2': '2. 开启右上角「开发者模式」开关',
         'extensionInstall.step3': '3. 点击左上角「加载已解压的扩展程序」按钮',
@@ -36,7 +37,7 @@ window.__ModuleLoader__.load({
         'extensionInstall.pathCopied': '已复制路径',
         'extensionInstall.reloadReminder': '已加载过扩展？打开 chrome://extensions，找到“dsh 浏览器助手”，点击卡片上的“重新加载”旋转箭头（↻）即可更新，然后重启 dsh。',
         'extensionInstall.failed': '扩展自动释放失败：',
-        'extensionInstall.manualHint': '请检查目录写入权限，或从插件包内的 extension/ 目录手动加载。',
+        'extensionInstall.manualHint': '已降级为插件包内置目录（见上方），可直接点击上方按钮复制后在浏览器中加载；如需标准目录请检查目录写入权限。',
       },
       en: {
         'bridgeAddress.title': 'Browser bridge address',
@@ -48,6 +49,7 @@ window.__ModuleLoader__.load({
 
         'extensionInstall.title': 'Browser Extension Setup',
         'extensionInstall.help': 'The extension has been extracted to a local directory. Load it unpacked in four simple steps:',
+        'extensionInstall.manualHelp': 'Automatic extraction failed. Fell back to bundled package directory; load it unpacked in four simple steps:',
         'extensionInstall.step1': '1. Open chrome://extensions in Chrome (or edge://extensions in Edge)',
         'extensionInstall.step2': '2. Turn on "Developer mode" in the top-right corner',
         'extensionInstall.step3': '3. Click the "Load unpacked" button in the top-left',
@@ -56,7 +58,7 @@ window.__ModuleLoader__.load({
         'extensionInstall.pathCopied': 'Path copied',
         'extensionInstall.reloadReminder': 'Already installed? Open chrome://extensions, find “dsh Browser Assistant,” click the rotating-arrow Reload button (↻) to apply updates, then restart dsh.',
         'extensionInstall.failed': 'Automatic extension extraction failed: ',
-        'extensionInstall.manualHint': 'Please check write permissions or load manually from the plugin package extension/ directory.',
+        'extensionInstall.manualHint': 'Fell back to bundled package directory (shown above). You can copy the path above and load directly; check permissions to use standard directory.',
       },
     }
 
@@ -74,7 +76,7 @@ window.__ModuleLoader__.load({
           signal: AbortSignal.timeout(1_500),
         })
         if (!response.ok) {
-          return { wsUrl: fallbackUrl, extensionPath: '', extensionStatus: 'unknown', extensionError: '' }
+          return { wsUrl: fallbackUrl, extensionPath: '', extensionStatus: 'unknown', extensionManualPath: '', extensionError: '' }
         }
         const body = await response.json()
         const wsUrl = (typeof body?.wsUrl === 'string'
@@ -85,10 +87,11 @@ window.__ModuleLoader__.load({
           wsUrl,
           extensionPath: typeof body?.extensionPath === 'string' ? body.extensionPath : '',
           extensionStatus: typeof body?.extensionStatus === 'string' ? body.extensionStatus : 'unknown',
+          extensionManualPath: typeof body?.extensionManualPath === 'string' ? body.extensionManualPath : '',
           extensionError: typeof body?.extensionError === 'string' ? body.extensionError : '',
         }
       } catch {
-        return { wsUrl: fallbackUrl, extensionPath: '', extensionStatus: 'unknown', extensionError: '' }
+        return { wsUrl: fallbackUrl, extensionPath: '', extensionStatus: 'unknown', extensionManualPath: '', extensionError: '' }
       }
     }
 
@@ -125,6 +128,7 @@ window.__ModuleLoader__.load({
         wsUrl: '',
         extensionPath: '',
         extensionStatus: 'loading',
+        extensionManualPath: '',
         extensionError: '',
       })
       const [status, setStatus] = React.useState('loading')
@@ -156,6 +160,11 @@ window.__ModuleLoader__.load({
         return () => window.clearTimeout(timer)
       }, [copiedPath])
 
+      const isFailed = config.extensionStatus === 'failed'
+      const displayPath = (isFailed && config.extensionManualPath)
+        ? config.extensionManualPath
+        : config.extensionPath
+
       const copyText = React.useCallback(async (text, selector, onSuccess) => {
         if (!text) return
         try {
@@ -179,8 +188,8 @@ window.__ModuleLoader__.load({
       }, [copyText, config.wsUrl])
 
       const onCopyPath = React.useCallback(() => {
-        void copyText(config.extensionPath, '.dshBridgePathValue', () => setCopiedPath(true))
-      }, [copyText, config.extensionPath])
+        void copyText(displayPath, '.dshBridgePathValue', () => setCopiedPath(true))
+      }, [copyText, displayPath])
 
       const wsValue = status === 'loading'
         ? t('bridgeAddress.loading')
@@ -190,7 +199,7 @@ window.__ModuleLoader__.load({
 
       const pathValue = status === 'loading'
         ? t('bridgeAddress.loading')
-        : config.extensionPath || t('bridgeAddress.unavailable')
+        : displayPath || t('bridgeAddress.unavailable')
 
       return React.createElement(
         'div',
@@ -201,7 +210,7 @@ window.__ModuleLoader__.load({
           'div',
           { className: 'dshBridgeSection' },
           React.createElement('div', { className: 'dshBridgeTitle' }, t('extensionInstall.title')),
-          React.createElement('p', { className: 'dshBridgeHelp' }, t('extensionInstall.help')),
+          React.createElement('p', { className: 'dshBridgeHelp' }, isFailed ? t('extensionInstall.manualHelp') : t('extensionInstall.help')),
           React.createElement(
             'ul',
             { className: 'dshBridgeSteps' },
@@ -217,7 +226,7 @@ window.__ModuleLoader__.load({
               'code',
               {
                 className: 'dshBridgeValue dshBridgePathValue',
-                title: config.extensionPath || undefined,
+                title: displayPath || undefined,
               },
               pathValue,
             ),
@@ -226,13 +235,13 @@ window.__ModuleLoader__.load({
               {
                 type: 'button',
                 className: 'dshBridgeButton',
-                disabled: status !== 'ready' || !config.extensionPath,
+                disabled: status !== 'ready' || !displayPath,
                 onClick: onCopyPath,
               },
               copiedPath ? t('extensionInstall.pathCopied') : t('extensionInstall.copyPath'),
             ),
           ),
-          config.extensionStatus === 'failed' && React.createElement(
+          isFailed && React.createElement(
             'div',
             { className: 'dshBridgeErrorNotice' },
             React.createElement('span', null, `${t('extensionInstall.failed')}${config.extensionError}`),

@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync, statSync, mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -114,11 +115,43 @@ describe('packaged extension consistency', () => {
   })
 
   it('detects byte discrepancies and missing files when directories differ', () => {
+    // Assert build-stamp.json exists in distDir and triggers a mismatch when unignored
+    expect(existsSync(join(distDir, 'build-stamp.json')), 'distDir should contain build-stamp.json').toBe(true)
     const testComparison = compareExtensionDirectories(distDir, packagedExtDir, new Set())
-    // Because build-stamp.json is in distDir but not in packagedExtDir, it should detect the difference when not ignored:
-    if (existsSync(join(distDir, 'build-stamp.json'))) {
-      expect(testComparison.matches).toBe(false)
-      expect(testComparison.differences.some(d => d.includes('build-stamp.json'))).toBe(true)
+    expect(testComparison.matches).toBe(false)
+    expect(testComparison.differences.some(d => d.includes('build-stamp.json'))).toBe(true)
+  })
+
+  it('detects content mismatches, missing files, and extraneous files across mock directories', () => {
+    const baseTemp = mkdtempSync(join(tmpdir(), 'dsh-sync-spec-'))
+    const mockA = join(baseTemp, 'dirA')
+    const mockB = join(baseTemp, 'dirB')
+
+    try {
+      mkdirSync(mockA, { recursive: true })
+      mkdirSync(mockB, { recursive: true })
+
+      // File identical
+      writeFileSync(join(mockA, 'same.txt'), 'hello', 'utf8')
+      writeFileSync(join(mockB, 'same.txt'), 'hello', 'utf8')
+
+      // Content mismatch
+      writeFileSync(join(mockA, 'diff.txt'), 'foo-version-1', 'utf8')
+      writeFileSync(join(mockB, 'diff.txt'), 'bar-version-2', 'utf8')
+
+      // Missing in B
+      writeFileSync(join(mockA, 'only-in-a.txt'), 'a-only', 'utf8')
+
+      // Extraneous in B
+      writeFileSync(join(mockB, 'only-in-b.txt'), 'b-only', 'utf8')
+
+      const result = compareExtensionDirectories(mockA, mockB)
+      expect(result.matches).toBe(false)
+      expect(result.differences.some(d => d.includes('Content mismatch for: diff.txt'))).toBe(true)
+      expect(result.differences.some(d => d.includes('Missing in packaged extension: only-in-a.txt'))).toBe(true)
+      expect(result.differences.some(d => d.includes('Extraneous in packaged extension: only-in-b.txt'))).toBe(true)
+    } finally {
+      rmSync(baseTemp, { recursive: true, force: true })
     }
   })
 })

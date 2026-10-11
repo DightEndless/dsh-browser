@@ -136,6 +136,8 @@ describe('apply', () => {
     expect(parsed.wsUrl).toMatch(/^ws:\/\/127\.0\.0\.1:/)
     expect(parsed.extensionPath).toBe(join(home, 'browser-extension'))
     expect(['installed', 'up-to-date']).toContain(parsed.extensionStatus)
+    expect(typeof parsed.extensionManualPath).toBe('string')
+    expect(parsed.extensionManualPath).toMatch(/extension$/)
   })
 
   it('rejects invalid budgets loudly', async () => {

@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { mkdtemp, rm } from 'node:fs/promises'
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, writeFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
@@ -125,6 +125,69 @@ describe('releasePackagedExtension', () => {
     expect(result.status).toBe('failed')
     expect(result.error).toContain('Bundled extension source not found')
     expect(warnSpy).toHaveBeenCalled()
+  })
+
+  it('prunes stale files from target directory when upgrading to a new version', () => {
+    // Install version 1.2.3 with an extra file
+    writeFileSync(join(mockSource, 'stale-asset.js'), 'console.log("old");', 'utf8')
+    releasePackagedExtension({
+      sourceDir: mockSource,
+      targetDir: mockTarget,
+    })
+    expect(existsSync(join(mockTarget, 'stale-asset.js'))).toBe(true)
+
+    // Remove the stale file in source and bump version to 1.2.4
+    rmSync(join(mockSource, 'stale-asset.js'))
+    writeFileSync(join(mockSource, 'manifest.json'), JSON.stringify({ name: 'test-ext', version: '1.2.4' }), 'utf8')
+
+    // Release update
+    const updated = releasePackagedExtension({
+      sourceDir: mockSource,
+      targetDir: mockTarget,
+    })
+
+    expect(updated.status).toBe('installed')
+    expect(updated.version).toBe('1.2.4')
+    // Stale asset must be pruned from target
+    expect(existsSync(join(mockTarget, 'stale-asset.js'))).toBe(false)
+    // Core files must remain
+    expect(existsSync(join(mockTarget, 'manifest.json'))).toBe(true)
+    expect(existsSync(join(mockTarget, 'background.js'))).toBe(true)
+  })
+
+  it('fails gracefully when bundled manifest is invalid JSON or lacks version', () => {
+    writeFileSync(join(mockSource, 'manifest.json'), 'invalid JSON {', 'utf8')
+    const warnSpy = vi.fn()
+
+    const result = releasePackagedExtension({
+      sourceDir: mockSource,
+      targetDir: mockTarget,
+      logger: { warn: warnSpy },
+    })
+
+    expect(result.status).toBe('failed')
+    expect(result.error).toContain('Failed to read bundled extension manifest')
+    expect(warnSpy).toHaveBeenCalled()
+  })
+
+  it('reinstalls when target manifest version does not match version file', () => {
+    // Initial install
+    releasePackagedExtension({
+      sourceDir: mockSource,
+      targetDir: mockTarget,
+    })
+
+    // Corrupt or alter target manifest version while keeping .dsh-extension-version
+    writeFileSync(join(mockTarget, 'manifest.json'), JSON.stringify({ name: 'test-ext', version: 'corrupted-version' }), 'utf8')
+
+    // Next call must detect the discrepancy and reinstall rather than reporting up-to-date
+    const refreshed = releasePackagedExtension({
+      sourceDir: mockSource,
+      targetDir: mockTarget,
+    })
+
+    expect(refreshed.status).toBe('installed')
+    expect(JSON.parse(readFileSync(join(mockTarget, 'manifest.json'), 'utf8')).version).toBe('1.2.3')
   })
 
   it('can release the real repo bundled extension without errors', () => {

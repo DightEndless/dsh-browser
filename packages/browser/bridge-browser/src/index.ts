@@ -260,6 +260,7 @@ function mountBridge(
         ...(extensionRelease ? {
           extensionPath: extensionRelease.targetDir,
           extensionStatus: extensionRelease.status,
+          extensionManualPath: extensionRelease.sourceDir,
           ...(extensionRelease.error ? { extensionError: extensionRelease.error } : {}),
         } : {}),
       }))
