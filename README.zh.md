@@ -29,7 +29,7 @@
 **1. 只装插件**（已预构建，无需构建步骤，也不需要 Git）：
 
 ```sh
-dsh plugin --profile web add https://github.com/DightEndless/dsh-browser/releases/download/v0.3.2/dightendless-dsh-bridge-browser-0.3.2.tgz
+dsh plugin --profile web add https://github.com/DightEndless/dsh-browser/releases/download/v0.3.3/dightendless-dsh-bridge-browser-0.3.3.tgz
 ```
 
 同一个包也发布在 npm 上，CLI 可以直接按包名安装：
@@ -41,7 +41,7 @@ dsh plugin --profile web add @dightendless/dsh-bridge-browser
 （手动管理 profile 的话就是 `npm i @dightendless/dsh-bridge-browser`。）
 
 **2. 只装扩展**（已预构建）：下载
-[`dsh-browser-extension-0.3.2.zip`](https://github.com/DightEndless/dsh-browser/releases/download/v0.3.2/dsh-browser-extension-0.3.2.zip)，
+[`dsh-browser-extension-0.3.3.zip`](https://github.com/DightEndless/dsh-browser/releases/download/v0.3.3/dsh-browser-extension-0.3.3.zip)，
 解压后打开 `chrome://extensions`（Edge 是 `edge://extensions`），开启右上角**开发者模式**，点
 **加载已解压的扩展程序**，选中解压出来的那个文件夹。
 

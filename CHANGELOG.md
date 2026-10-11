@@ -10,6 +10,59 @@ change:
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 0.3.3 — 2026-10-11
+
+### Added
+
+- **`browser_dialog`: a native JavaScript dialog is handed to the model, not answered for it.**
+  `alert`, `confirm`, `prompt` and `beforeunload` freeze the tab's JavaScript thread, and the
+  content script that every tool goes through is part of what stops answering. The failure was
+  therefore reported as a timeout — twice in a row, with the second message telling the model
+  to use the very tool that had just timed out. The debugger channel now reports the dialog
+  while it is still cheap to do so (`[Native JS dialog opened: confirm("…")]`, with the
+  warning that nothing else will work until it is answered), and `browser_dialog` answers it:
+  `action: 'accept'` or `'dismiss'`, plus `promptText` for a prompt — an accepted prompt with
+  no text submits the page's own default. Nothing is answered on the model's behalf, the hold
+  window is 60 seconds, and after it the dialog can no longer be answered at all, which is
+  reported as such. The call goes through the approval prompt like every other
+  state-changing tool.
+- **CSS-hidden checkboxes and radios are reachable.** A control made invisible the usual way
+  (`opacity: 0`, or a zero-sized input behind a styled label) has no snapshot number of its
+  own, so it could be read but never clicked. Its visible label is now indexed as the proxy —
+  `[4] checkbox "Custom Styled Switch (via label)"` — and clicking or toggling that number
+  drives the real input, including the `disabled` case.
+- **`browser_click_at` reaches hover-gated and off-screen targets.** The click sends a
+  `mouseMoved` first, so a control that ignores a click until it has seen a pointer event now
+  responds; and an element outside the viewport is scrolled into view, re-measured, and only
+  clicked if it really landed inside — the result says so
+  (`(scrolled into view before clicking)`).
+
+### Fixed
+
+- **`browser_reload` could not rescue a frozen tab.** It was routed through the content
+  script, which is exactly what a frozen tab cannot answer, so the model received a second
+  identical timeout and a message pointing back at `browser_reload`. On a content-script
+  timeout it now falls back to browser-level `chrome.tabs.reload`, which resets the page in
+  milliseconds. This is also the escape hatch for a pending native dialog.
+- **The Windows end-to-end smoke test skipped silently and reported green.** Its Chromium
+  discovery hard-coded browser directory names and inner layouts (`chromium-1217`, `chrome-win`)
+  and ignored `PLAYWRIGHT_BROWSERS_PATH`, so the one test that loads a built extension into a
+  real browser never ran on this platform. Discovery now walks the workspace and the Playwright
+  cache for whatever is actually installed.
+- **The benchmark suite could not start on Windows.** It spawned `pnpm`, which is a shell
+  wrapper rather than an executable, so the backend died with `ENOENT`. It now resolves DSH's
+  own entry point and runs it under the current Node.
+
+### Notes
+
+- Both artifacts change in this release. The 0.3.1 and 0.3.2 extension zips differed from
+  their predecessors by the manifest version alone; this one carries the four extension
+  changes above.
+- Developer-only: the L2 harness now refuses to start when `dist/` was built from a different
+  commit, or from sources edited since the build. A stale build is indistinguishable from a
+  real regression — it produced four false failures before this guard existed.
+- `.gitattributes` normalises line endings across the repository (`*.ps1`, `*.cmd` and `*.bat`
+  stay CRLF).
 ## 0.3.2 — 2026-10-11
 
 ### Fixed
