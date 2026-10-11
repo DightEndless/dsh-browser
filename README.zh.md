@@ -38,7 +38,7 @@ dsh plugin --profile web add https://github.com/DightEndless/dsh-browser/release
 dsh plugin --profile web add @dightendless/dsh-bridge-browser
 ```
 
-（手动管理 profile 的话就是 `npm i @dightendless/dsh-bridge-browser`。）
+（手动管理 profile 的话就是 `npm i @dightendless/dsh-bridge-browser`。装完插件后打开面板，按提示把扩展加载进来。）
 
 **2. 只装扩展**（已预构建）：下载
 [`dsh-browser-extension-0.3.3.zip`](https://github.com/DightEndless/dsh-browser/releases/download/v0.3.3/dsh-browser-extension-0.3.3.zip)，

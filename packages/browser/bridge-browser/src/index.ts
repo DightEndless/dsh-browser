@@ -45,6 +45,10 @@ import {
   type TypertGatewayLike,
 } from './remote-host-api.ts'
 import { isRecord, type BrowserHostApi } from './host-api.ts'
+import {
+  releasePackagedExtension,
+  type ExtensionReleaseResult,
+} from './extension-release.ts'
 
 /** Cordis plugin name used by loader diagnostics. */
 export const name = 'bridge-browser'
@@ -142,7 +146,13 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
   }
   if (connection === undefined) throw new Error('bridge-browser: dsh connection service is required')
   const tokenRes = await resolveToken(resolved.token)
-  mountBridge(ctx, resolved, tokenRes, createRemoteHostApi(gateway, connection))
+  const extensionRelease = releasePackagedExtension({ logger: ctx.logger })
+  if (extensionRelease.status === 'installed') {
+    ctx.logger.info(`browser bridge: extension v${extensionRelease.version} released to ${extensionRelease.targetDir}`)
+  } else if (extensionRelease.status === 'up-to-date') {
+    ctx.logger.info(`browser bridge: extension at ${extensionRelease.targetDir} is up to date (v${extensionRelease.version})`)
+  }
+  mountBridge(ctx, resolved, tokenRes, createRemoteHostApi(gateway, connection), extensionRelease)
 }
 
 function mountBridge(
@@ -150,6 +160,7 @@ function mountBridge(
   resolved: ResolvedConfig,
   tokenRes: Awaited<ReturnType<typeof resolveToken>>,
   hostApi: BrowserHostApi,
+  extensionRelease?: ExtensionReleaseResult,
 ): void {
   // Workspace grouping wraps the gateway create; session deferral wraps the
   // result so materialization at first prompt still flows through grouping.
@@ -244,7 +255,14 @@ function mountBridge(
     path: BRIDGE_CONFIG_PATH,
     handler: (_req, res) => {
       res.writeHead(200, { 'content-type': 'application/json' })
-      res.end(JSON.stringify({ wsUrl: `ws://127.0.0.1:${ctx.webServer.port}${BRIDGE_PATH}` }))
+      res.end(JSON.stringify({
+        wsUrl: `ws://127.0.0.1:${ctx.webServer.port}${BRIDGE_PATH}`,
+        ...(extensionRelease ? {
+          extensionPath: extensionRelease.targetDir,
+          extensionStatus: extensionRelease.status,
+          ...(extensionRelease.error ? { extensionError: extensionRelease.error } : {}),
+        } : {}),
+      }))
     },
   }
   ctx.effect(() => ctx.webServer.register(configRoute), 'bridge-browser: /ext/bridge-config route')
@@ -291,3 +309,5 @@ function hasRemoteWireStream(gateway: GatewayCandidate): gateway is TypertGatewa
     && typeof gateway.wireStream.open === 'function'
     && typeof gateway.wireStream.failure === 'function'
 }
+
+export { releasePackagedExtension, type ExtensionReleaseResult } from './extension-release.ts'

@@ -4,9 +4,11 @@ import z from "@deepseek-ai/schemastery";
 import { dshHomePath } from "@deepseek-ai/dsh-home-paths";
 import { WebSocket, WebSocketServer } from "ws";
 import { chmod, lstat, mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
-import path, { dirname } from "node:path";
+import path, { dirname, join, resolve } from "node:path";
 import { createUserMessage } from "@deepseek-ai/dsh-llm";
 import { defineTool } from "@deepseek-ai/dsh-tools";
+import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 //#region lib/types/session-purge.js
 /**
 * File-level removal of one session's durable storage under the dsh home.
@@ -2817,6 +2819,110 @@ function isRemoteEventReady(value) {
 	return isRecord(value) && value.type === "ready" && typeof value.clientId === "string" && value.clientId.length > 0;
 }
 //#endregion
+//#region lib/types/extension-release.js
+/**
+* Release bundled browser extension files to ~/.dsh/browser-extension on startup.
+*
+* This provides zero-config unpacked extension readiness: when the bridge
+* plugin is installed into DSH, it unpacks the bundled extension to the standard
+* directory so the user only has to click "Load unpacked" once in their browser.
+*
+* @module
+*/
+const EXTENSION_VERSION_FILE = ".dsh-extension-version";
+/**
+* Determine the default source directory containing the bundled extension.
+*/
+function defaultExtensionSourceDir() {
+	return resolve(fileURLToPath(new URL("../extension", import.meta.url)));
+}
+/**
+* Determine the default target directory under the active DSH home.
+*/
+function defaultExtensionTargetDir() {
+	return dshHomePath("browser-extension");
+}
+/**
+* Recursively copy directory tree using mkdirSync and copyFileSync.
+* Avoids fs.cpSync due to Node 24 Windows non-ASCII path crash (STATUS_STACK_BUFFER_OVERRUN).
+*/
+function copyTree(from, to) {
+	mkdirSync(to, { recursive: true });
+	for (const entry of readdirSync(from, { withFileTypes: true })) {
+		const src = join(from, entry.name);
+		const dst = join(to, entry.name);
+		if (entry.isDirectory()) copyTree(src, dst);
+		else if (entry.isFile()) copyFileSync(src, dst);
+	}
+}
+/**
+* Release the bundled extension to the destination directory if not already current.
+* Idempotent: checks .dsh-extension-version against bundled manifest version.
+* Safe: catches filesystem errors without throwing, logging a warning instead.
+*/
+function releasePackagedExtension(options = {}) {
+	const sourceDir = options.sourceDir ?? defaultExtensionSourceDir();
+	const targetDir = options.targetDir ?? defaultExtensionTargetDir();
+	const logger = options.logger;
+	if (!existsSync(sourceDir) || !existsSync(join(sourceDir, "manifest.json"))) {
+		const error = `Bundled extension source not found at ${sourceDir}`;
+		logger?.warn?.(`browser bridge: ${error}`);
+		return {
+			status: "failed",
+			sourceDir,
+			targetDir,
+			version: "unknown",
+			error
+		};
+	}
+	let version = "unknown";
+	try {
+		const manifest = JSON.parse(readFileSync(join(sourceDir, "manifest.json"), "utf8"));
+		if (typeof manifest.version === "string" && manifest.version.length > 0) version = manifest.version;
+	} catch (err) {
+		const error = `Failed to read bundled extension manifest: ${err.message}`;
+		logger?.warn?.(`browser bridge: ${error}`);
+		return {
+			status: "failed",
+			sourceDir,
+			targetDir,
+			version,
+			error
+		};
+	}
+	const versionFile = join(targetDir, EXTENSION_VERSION_FILE);
+	const targetManifest = join(targetDir, "manifest.json");
+	if (existsSync(versionFile) && existsSync(targetManifest)) try {
+		if (readFileSync(versionFile, "utf8").trim() === version) return {
+			status: "up-to-date",
+			sourceDir,
+			targetDir,
+			version
+		};
+	} catch {}
+	try {
+		mkdirSync(targetDir, { recursive: true });
+		copyTree(sourceDir, targetDir);
+		writeFileSync(versionFile, `${version}\n`, "utf8");
+		return {
+			status: "installed",
+			sourceDir,
+			targetDir,
+			version
+		};
+	} catch (err) {
+		const error = `Failed to write extension to ${targetDir}: ${err.message}`;
+		logger?.warn?.(`browser bridge: ${error}`);
+		return {
+			status: "failed",
+			sourceDir,
+			targetDir,
+			version,
+			error
+		};
+	}
+}
+//#endregion
 //#region lib/types/index.js
 /**
 * `@dightendless/dsh-bridge-browser`: token-authenticated WebSocket bridge for
@@ -2901,9 +3007,13 @@ async function apply(ctx, config) {
 	const connection = ctx.get("connection");
 	if (gateway === void 0 || !hasRemoteWireStream(gateway)) throw new Error("bridge-browser: dsh 0.2.0-rc.1 or a compatible newer runtime is required (Gateway wireStream unavailable)");
 	if (connection === void 0) throw new Error("bridge-browser: dsh connection service is required");
-	mountBridge(ctx, resolved, await resolveToken(resolved.token), createRemoteHostApi(gateway, connection));
+	const tokenRes = await resolveToken(resolved.token);
+	const extensionRelease = releasePackagedExtension({ logger: ctx.logger });
+	if (extensionRelease.status === "installed") ctx.logger.info(`browser bridge: extension v${extensionRelease.version} released to ${extensionRelease.targetDir}`);
+	else if (extensionRelease.status === "up-to-date") ctx.logger.info(`browser bridge: extension at ${extensionRelease.targetDir} is up to date (v${extensionRelease.version})`);
+	mountBridge(ctx, resolved, tokenRes, createRemoteHostApi(gateway, connection), extensionRelease);
 }
-function mountBridge(ctx, resolved, tokenRes, hostApi) {
+function mountBridge(ctx, resolved, tokenRes, hostApi, extensionRelease) {
 	const api = withSessionDeferral(withSessionWorkspace(hostApi, resolved.sessionWorkspacePath, (message) => {
 		ctx.logger.warn(message);
 	}), resolved.deferSessionCreate, ctx.get("attachments")?.imageLimits);
@@ -2970,7 +3080,14 @@ function mountBridge(ctx, resolved, tokenRes, hostApi) {
 		path: BRIDGE_CONFIG_PATH,
 		handler: (_req, res) => {
 			res.writeHead(200, { "content-type": "application/json" });
-			res.end(JSON.stringify({ wsUrl: `ws://127.0.0.1:${ctx.webServer.port}${BRIDGE_PATH}` }));
+			res.end(JSON.stringify({
+				wsUrl: `ws://127.0.0.1:${ctx.webServer.port}${BRIDGE_PATH}`,
+				...extensionRelease ? {
+					extensionPath: extensionRelease.targetDir,
+					extensionStatus: extensionRelease.status,
+					...extensionRelease.error ? { extensionError: extensionRelease.error } : {}
+				} : {}
+			}));
 		}
 	};
 	ctx.effect(() => ctx.webServer.register(configRoute), "bridge-browser: /ext/bridge-config route");
@@ -2998,4 +3115,4 @@ function hasRemoteWireStream(gateway) {
 	return gateway.wireStream !== void 0 && typeof gateway.wireStream.open === "function" && typeof gateway.wireStream.failure === "function";
 }
 //#endregion
-export { Config, apply, assertPositiveInteger, inject, name, resolveConfig };
+export { Config, apply, assertPositiveInteger, inject, name, releasePackagedExtension, resolveConfig };

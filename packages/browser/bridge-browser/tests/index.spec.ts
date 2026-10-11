@@ -113,6 +113,31 @@ describe('apply', () => {
     await apply(stubContext(), VALID)
   })
 
+  it('registers /ext/bridge-config route providing wsUrl, extensionPath, and extensionStatus', async () => {
+    const home = await mkdtemp(join(tmpdir(), 'dsh-bridge-home-'))
+    dirs.push(home)
+    vi.stubEnv('DSH_HOME', home)
+    const ctx = stubContext()
+    let configRouteHandler: ((req: unknown, res: { writeHead: () => void; end: (body: string) => void }) => void) | undefined
+    vi.spyOn(ctx.webServer, 'register').mockImplementation((route: any) => {
+      if (route.path === '/ext/bridge-config') {
+        configRouteHandler = route.handler
+      }
+      return () => {}
+    })
+    await apply(ctx, VALID)
+    expect(configRouteHandler).toBeDefined()
+    let responseBody = ''
+    configRouteHandler!({}, {
+      writeHead: () => {},
+      end: (body: string) => { responseBody = body },
+    })
+    const parsed = JSON.parse(responseBody)
+    expect(parsed.wsUrl).toMatch(/^ws:\/\/127\.0\.0\.1:/)
+    expect(parsed.extensionPath).toBe(join(home, 'browser-extension'))
+    expect(['installed', 'up-to-date']).toContain(parsed.extensionStatus)
+  })
+
   it('rejects invalid budgets loudly', async () => {
     await expect(apply(stubContext(), { ...VALID, toolTimeoutMs: 0 })).rejects.toThrow(/toolTimeoutMs/)
     await expect(apply(stubContext(), { ...VALID, snapshotMaxChars: -1 })).rejects.toThrow(/snapshotMaxChars/)

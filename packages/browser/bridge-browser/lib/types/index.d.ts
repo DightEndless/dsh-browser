@@ -56,5 +56,5 @@ export declare function resolveConfig(config: Config): ResolvedConfig;
  * @param config - plugin config (schema defaults applied).
  */
 export declare function apply(ctx: Context, config: Config): Promise<void>;
-export {};
+export { releasePackagedExtension, type ExtensionReleaseResult } from './extension-release.ts';
 //# sourceMappingURL=index.d.ts.map

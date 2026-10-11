@@ -38,7 +38,7 @@ The same package is on npm, and the CLI takes it straight from there:
 dsh plugin --profile web add @dightendless/dsh-bridge-browser
 ```
 
-(`npm i @dightendless/dsh-bridge-browser` if you manage the profile by hand instead.)
+(`npm i @dightendless/dsh-bridge-browser` if you manage the profile by hand instead. After installing the plugin, open the panel and follow the instructions to load the extension.)
 
 **2. Extension only**, prebuilt: download
 [`dsh-browser-extension-0.3.3.zip`](https://github.com/DightEndless/dsh-browser/releases/download/v0.3.3/dsh-browser-extension-0.3.3.zip),
