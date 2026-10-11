@@ -30,6 +30,8 @@ curl -fsSL https://raw.githubusercontent.com/DightEndless/dsh-browser/refs/heads
 cd ~/.dsh/dsh-browser && pnpm start
 ```
 
+To skip the build, take the prebuilt package instead: `npm i @dightendless/dsh-bridge-browser`, or point `dsh plugin --profile web add` at the tarball attached to the [v0.3.1 release](https://github.com/DightEndless/dsh-browser/releases/tag/v0.3.1).
+
 On Windows, run the PowerShell installer instead:
 
 ```powershell
@@ -39,7 +41,7 @@ cd $HOME\.dsh\dsh-browser; pnpm start
 
 Developers can instead clone the repository and run `./scripts/install.sh` followed by `pnpm start` from that checkout. The local mode uses the current branch without downloading or overwriting source files. Both installation modes register the same profile bundle; build tools resolve only from the selected workspace and never from a parent checkout or parent `node_modules` directory.
 
-The workspace pins dsh 0.2.0-rc.2, the minimum supported runtime. Older DSH releases are not supported:
+The workspace pins dsh 0.2.0-rc.2 as its minimum supported runtime, and the package's peer ranges accept the `0.2.1-alpha` line too (`0.2.1-alpha.1` included, which is the build the plugin marketplace verifies against). Older DSH releases are not supported:
 
 ```sh
 npx @deepseek-ai/dsh@0.2.0-rc.2 web

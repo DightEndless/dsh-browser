@@ -10,6 +10,38 @@ change:
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 0.3.1 — 2026-10-11
+
+### Changed
+
+- **The published package accepts the `0.2.1-alpha` line.** Every `@deepseek-ai/dsh-*`
+  peer was pinned to exactly `0.2.0-rc.2`, so a DSH `0.2.1-alpha.1` host — the build the
+  plugin marketplace states it verifies against — failed its peer check before the plugin
+  ever loaded. The peers are now `0.2.0-rc.2 || >=0.2.1-alpha.1 <0.3.0`: both the rc line
+  this tree develops against and the alpha line it is verified against are explicit, which
+  is what the marketplace's publishing checklist asks for by name.
+- **`@deepseek-ai/dsh-invariants` is an optional peer now.** It has no `0.2.1-alpha.*`
+  publication at all (`latest` is `0.0.1-rc.1`, `next` is `0.2.0-rc.2`), and this package
+  only imports its types: the companion plugin carries `inject: ['invariants']`, so a host
+  without that service never mounts it. Optional keeps the alpha install clean without
+  dropping the invariant companion where the service does exist.
+- **The READMEs name npm beside the release tarball** — `npm i @dightendless/dsh-bridge-browser`
+  — and both language sides carry the runtime note reworded for the alpha line.
+
+### Distribution
+
+- `dightendless-dsh-bridge-browser-0.3.1.tgz` — prebuilt plugin package.
+- `dsh-browser-extension-0.3.1.zip` — prebuilt extension (forward-slash zip entries).
+- `@dightendless/dsh-bridge-browser@0.3.1` on npm.
+
+### Notes
+
+- The extension and the bridge package are versioned together; no extension code changed
+  in this release, so the zip differs from 0.3.0 by its manifest version alone.
+- This release removes the install-time blocker. It is not by itself proof that the plugin
+  loads on a `0.2.1-alpha.1` host — that load check belongs to the marketplace's own
+  verification run.
+
 ## 0.3.0 — 2026-10-11
 
 ### Fixed

@@ -7,6 +7,8 @@
 
 [English](README.md) | **中文**
 
+[![npm version](https://img.shields.io/npm/v/%40dightendless%2Fdsh-bridge-browser?label=npm&color=cb3837)](https://www.npmjs.com/package/@dightendless/dsh-bridge-browser)
+
 <img width="1672" alt="dsh 浏览器操作：本 fork 新增的工具，围绕一台带有编号元素清单与侧边栏的浏览器窗口排布" src="packages/browser/bridge-browser/assets/screenshots/cover.png" />
 
 <img width="1672" alt="侧边栏已连接，正在读取一个页面" src="packages/browser/bridge-browser/assets/screenshots/browser-and-panel.png" />
@@ -18,7 +20,7 @@
 浏览器操作以文本为主：页面会转换为结构化文本和带编号的交互元素清单，模型通过编号定位元素。`browser_screenshot` 是唯一会返回图片的工具——它把截图存成本地文件，只把路径交给模型，因此页面通道依然保持文本形态。dsh 0.2.0 的多模态对话是另一条独立通道：宿主声明图片能力时，侧栏可发送 PNG、JPEG、WebP 和 GIF。
 
 > [!IMPORTANT]
-> 当前工作区固定使用 dsh 0.2.0-rc.2，也是最低支持版本；不再支持旧版 DSH。
+> 当前工作区固定使用 dsh 0.2.0-rc.2 作为最低支持版本；发布包同时接受 `0.2.1-alpha` 一线（含 `0.2.1-alpha.1`，也就是插件市场用于验证的那个版本）。不再支持更旧的 DSH。
 
 ## 快速安装
 
@@ -27,11 +29,13 @@
 **1. 只装插件**（已预构建，无需构建步骤，也不需要 Git）：
 
 ```sh
-dsh plugin --profile web add https://github.com/DightEndless/dsh-browser/releases/download/v0.3.0/dightendless-dsh-bridge-browser-0.3.0.tgz
+dsh plugin --profile web add https://github.com/DightEndless/dsh-browser/releases/download/v0.3.1/dightendless-dsh-bridge-browser-0.3.1.tgz
 ```
 
+同一个包也发布在 npm 上：[`@dightendless/dsh-bridge-browser`](https://www.npmjs.com/package/@dightendless/dsh-bridge-browser)（`npm i @dightendless/dsh-bridge-browser`），适合从 registry 而不是发行资产解析插件的环境。
+
 **2. 只装扩展**（已预构建）：下载
-[`dsh-browser-extension-0.3.0.zip`](https://github.com/DightEndless/dsh-browser/releases/download/v0.3.0/dsh-browser-extension-0.3.0.zip)，
+[`dsh-browser-extension-0.3.1.zip`](https://github.com/DightEndless/dsh-browser/releases/download/v0.3.1/dsh-browser-extension-0.3.1.zip)，
 解压后打开 `chrome://extensions`（Edge 是 `edge://extensions`），开启右上角**开发者模式**，点
 **加载已解压的扩展程序**，选中解压出来的那个文件夹。
 

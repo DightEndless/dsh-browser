@@ -30,6 +30,8 @@ curl -fsSL https://raw.githubusercontent.com/DightEndless/dsh-browser/refs/heads
 cd ~/.dsh/dsh-browser && pnpm start
 ```
 
+不想构建的话，直接用预构建包：`npm i @dightendless/dsh-bridge-browser`，或把 `dsh plugin --profile web add` 指向 [v0.3.1 发行页](https://github.com/DightEndless/dsh-browser/releases/tag/v0.3.1) 上的 tgz。
+
 Windows 请改用 PowerShell 安装器：
 
 ```powershell
@@ -39,7 +41,7 @@ cd $HOME\.dsh\dsh-browser; pnpm start
 
 开发者也可以 clone 仓库，在 checkout 中依次运行 `./scripts/install.sh` 和 `pnpm start`。本地模式直接使用当前分支，不会下载或覆盖源码。两种安装模式都会注册同一个 profile bundle；构建工具只从选定的 workspace 解析，绝不读取父 checkout 或父目录的 `node_modules`。
 
-当前工作区固定使用 dsh 0.2.0-rc.2，也是最低支持版本；不再支持旧版 DSH：
+当前工作区固定使用 dsh 0.2.0-rc.2 作为最低支持版本；本包的 peer 范围同时接受 `0.2.1-alpha` 一线（含 `0.2.1-alpha.1`，也就是插件市场用于验证的那个版本）。不再支持更旧的 DSH：
 
 ```sh
 npx @deepseek-ai/dsh@0.2.0-rc.2 web

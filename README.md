@@ -7,6 +7,8 @@
 
 **English** | [中文](README.zh.md)
 
+[![npm version](https://img.shields.io/npm/v/%40dightendless%2Fdsh-bridge-browser?label=npm&color=cb3837)](https://www.npmjs.com/package/@dightendless/dsh-bridge-browser)
+
 <img width="1672" alt="dsh Browser Control: the tools this fork adds, arranged around a browser window with a numbered element list and the side panel" src="packages/browser/bridge-browser/assets/screenshots/cover.png" />
 
 <img width="1672" alt="A page being read with the side panel connected beside it" src="packages/browser/bridge-browser/assets/screenshots/browser-and-panel.png" />
@@ -18,7 +20,7 @@ Connect [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) to t
 Browser operation is text-first: pages become structured text with a numbered inventory of interactive elements, and the model addresses those elements by number. `browser_screenshot` is the one tool that returns an image—it saves the capture to a local file and hands the model that path, so the page channel keeps its text shape. dsh 0.2.0 multimodal chat is a separate channel again: the side panel accepts PNG, JPEG, WebP, and GIF attachments when the host advertises image support.
 
 > [!IMPORTANT]
-> The workspace pins dsh 0.2.0-rc.2, the minimum supported runtime. Older DSH releases are not supported.
+> The workspace pins dsh 0.2.0-rc.2 as its minimum supported runtime, and the published package accepts the `0.2.1-alpha` line as well — `0.2.1-alpha.1` included, which is the build the plugin marketplace verifies against. Older DSH releases are not supported.
 
 ## Quick install
 
@@ -27,11 +29,13 @@ Three routes. The integration contains both a dsh bridge plugin and a browser ex
 **1. Plugin only**, prebuilt, with no build step and no Git:
 
 ```sh
-dsh plugin --profile web add https://github.com/DightEndless/dsh-browser/releases/download/v0.3.0/dightendless-dsh-bridge-browser-0.3.0.tgz
+dsh plugin --profile web add https://github.com/DightEndless/dsh-browser/releases/download/v0.3.1/dightendless-dsh-bridge-browser-0.3.1.tgz
 ```
 
+The same package is on npm as [`@dightendless/dsh-bridge-browser`](https://www.npmjs.com/package/@dightendless/dsh-bridge-browser) (`npm i @dightendless/dsh-bridge-browser`), for setups that resolve the plugin from a registry rather than from a release asset.
+
 **2. Extension only**, prebuilt: download
-[`dsh-browser-extension-0.3.0.zip`](https://github.com/DightEndless/dsh-browser/releases/download/v0.3.0/dsh-browser-extension-0.3.0.zip),
+[`dsh-browser-extension-0.3.1.zip`](https://github.com/DightEndless/dsh-browser/releases/download/v0.3.1/dsh-browser-extension-0.3.1.zip),
 unzip it, then open `chrome://extensions` (Edge: `edge://extensions`), turn on **Developer mode**, choose **Load unpacked**, and select the folder that came out of the zip.
 
 Routes 1 and 2 together are the whole product, and neither needs Node, pnpm, or Git.
