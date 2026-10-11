@@ -1,10 +1,10 @@
 # @dightendless/dsh-bridge-browser
 
-English | [涓枃](README.zh.md)
+English | [中文](README.zh.md)
 
 This package is the bridge half of the [`DightEndless/dsh-browser`](https://github.com/DightEndless/dsh-browser) fork of [`omdsh-dev/dsh-browser`](https://github.com/omdsh-dev/dsh-browser), and is published under its own name so both can coexist in one dsh profile.
 
-The **browser-operation bridge** for dsh: mounts a token-authenticated WebSocket carrier (`/ext/bridge`) that the Chrome extension connects to, projects its calls onto dsh 0.2.0 Typert Remotes, follows Session and Remote Event streams per connection, and registers the text-first `browser_*` tool set that reads and operates the user's active tab through the extension 鈥?click elements, fill forms, scroll, and navigate in the real browser, login state preserved. The side panel is the conversation entry; the tools are the product.
+The **browser-operation bridge** for dsh: mounts a token-authenticated WebSocket carrier (`/ext/bridge`) that the Chrome extension connects to, projects its calls onto dsh 0.2.0 Typert Remotes, follows Session and Remote Event streams per connection, and registers the text-first `browser_*` tool set that reads and operates the user's active tab through the extension — click elements, fill forms, scroll, and navigate in the real browser, login state preserved. The side panel is the conversation entry; the tools are the product.
 
 **Text-first browser tools, multimodal chat passthrough**: page snapshots stay structured text (title, main content, numbered interactive inventory, and masked form fields), and every browser action uses stable inventory numbers. `browser_screenshot` is the one exception, and it keeps the tool surface text-shaped: the capture is written to a local file and the tool returns that path, so no pixels travel in the tool result. The generic RPC carrier also passes dsh 0.2.0 image prompts and durable attachment reads; deferred new sessions expose image limits only when the host actually mounts the attachment service.
 
@@ -52,17 +52,17 @@ The installer copies the unpacked extension to `~/.dsh/browser-extension` and op
 ## Security model
 
 - The bridge route lives **outside** the `/api` trust fence (which only guards client-connection's routes), so it carries its own bearer-token authentication: the first frame must be `hello` with the token within 5s, verified in constant time. Failed auth closes the socket.
-- Gateway methods the `/api` carrier pins to loopback (`settings.*`, `credentials.*`, `host.pickDirectory`, `host.openPath`) are refused for non-loopback remotes **even with a valid token** 鈥?defense in depth for `--host 0.0.0.0` deployments.
+- Gateway methods the `/api` carrier pins to loopback (`settings.*`, `credentials.*`, `host.pickDirectory`, `host.openPath`) are refused for non-loopback remotes **even with a valid token** — defense in depth for `--host 0.0.0.0` deployments.
 - One active connection at a time; a new authenticated socket replaces the previous one.
 - The bridge is a confused-deputy boundary, not a general auth layer: never expose `dsh web --host 0.0.0.0` on untrusted networks.
 - Extracted page text is marked as untrusted model input. Page reads honor the extension's ask/auto/off policy, while state-changing tools require an origin-scoped side-panel decision and fail closed without a panel. Same-origin repetition can be trusted for the current panel session; permanent trust remains an explicit setting.
 
 ## Wire protocol
 
-Frames are JSON objects discriminated by `t`, defined in [`protocol.ts`](src/protocol.ts) 鈥?the single source of truth shared with the extension through the workspace package's `./src/*` export. The built package also publishes `@dightendless/dsh-bridge-browser/protocol` for external consumers.
+Frames are JSON objects discriminated by `t`, defined in [`protocol.ts`](src/protocol.ts) — the single source of truth shared with the extension through the workspace package's `./src/*` export. The built package also publishes `@dightendless/dsh-bridge-browser/protocol` for external consumers.
 
-- Client 鈫?server: `hello` (auth + caps), `rpc` (gateway method passthrough), `respond` (resolve a host interaction by its RPC id), `tool.result`, `pong`.
-- Server 鈫?client: `hello.ok` (echoes negotiated caps), `rpc.result`, `respond.result` (correlated acceptance or error), `event` (bridge-owned projection of dsh Remote streams and waterfalls), `tool.call`, `ping`, `error`.
+- Client → server: `hello` (auth + caps), `rpc` (gateway method passthrough), `respond` (resolve a host interaction by its RPC id), `tool.result`, `pong`.
+- Server → client: `hello.ok` (echoes negotiated caps), `rpc.result`, `respond.result` (correlated acceptance or error), `event` (bridge-owned projection of dsh Remote streams and waterfalls), `tool.call`, `ping`, `error`.
 
 Each `respond` carries a globally unique transport id as well as the host interaction's `rpcId`. The extension routes its receipt only to the panel that initiated it and rejects pending responses on timeout, panel closure, or bridge disconnection.
 
@@ -77,10 +77,10 @@ Each `respond` carries a globally unique transport id as well as the host intera
 
 ## Model Experience
 
-- **Token effect**: one `browser_snapshot` (default 32k chars) costs roughly 8鈥?0k tokens for typical English text; the exact count depends on language and tokenizer, and delta snapshots cost a fraction of that. The system-prompt section tells the model to snapshot on demand rather than hoard page text.
+- **Token effect**: one `browser_snapshot` (default 32k chars) costs roughly 8–10k tokens for typical English text; the exact count depends on language and tokenizer, and delta snapshots cost a fraction of that. The system-prompt section tells the model to snapshot on demand rather than hoard page text.
 - **KV-cache effect**: none beyond ordinary tool results; snapshots are not cached server-side.
-- **Latency**: each action awaits the extension's real-page execution plus settle detection (typically 0.2鈥?s; navigation up to 5s).
-- **Failure modes**: `bridge-closed` (extension not connected), `timeout`, `no-active-tab`, `content-unavailable` (page needs a refresh), `action-failed` (stale inventory index 鈥?the model should re-snapshot).
+- **Latency**: each action awaits the extension's real-page execution plus settle detection (typically 0.2–2s; navigation up to 5s).
+- **Failure modes**: `bridge-closed` (extension not connected), `timeout`, `no-active-tab`, `content-unavailable` (page needs a refresh), `action-failed` (stale inventory index — the model should re-snapshot).
 
 ## Extension points
 

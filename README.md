@@ -3,9 +3,9 @@
 > [!NOTE]
 > **Open the extension side panel and it takes over the page you are browsing right now.**
 >
-> **This is a fork of [omdsh-dev/dsh-browser](https://github.com/omdsh-dev/dsh-browser)** that fills in what upstream lacks: viewport and whole-page `browser_screenshot`, `browser_hover`, `browser_click_at`, `browser_drag`, `browser_batch`, `browser_eval`, `browser_upload`, and `browser_images`. Its bridge package is `@dightendless/dsh-bridge-browser` 鈥?a name of its own, so this fork and the upstream package can sit in one dsh profile without replacing each other.
+> **This is a fork of [omdsh-dev/dsh-browser](https://github.com/omdsh-dev/dsh-browser)** that fills in what upstream lacks: viewport and whole-page `browser_screenshot`, `browser_hover`, `browser_click_at`, `browser_drag`, `browser_batch`, `browser_eval`, `browser_upload`, and `browser_images`. Its bridge package is `@dightendless/dsh-bridge-browser` — a name of its own, so this fork and the upstream package can sit in one dsh profile without replacing each other.
 
-**English** | [涓枃](README.zh.md)
+**English** | [中文](README.zh.md)
 
 [![npm version](https://img.shields.io/npm/v/%40dightendless%2Fdsh-bridge-browser?label=npm&color=cb3837)](https://www.npmjs.com/package/@dightendless/dsh-bridge-browser)
 
@@ -17,14 +17,14 @@ Connect [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) to t
 
 `dsh` is DeepSeek AI's open-source, plugin-based agent harness. This repository provides a companion browser bridge plugin and Chrome/Firefox MV3 extension as one standalone pnpm workspace.
 
-Browser operation is text-first: pages become structured text with a numbered inventory of interactive elements, and the model addresses those elements by number. `browser_screenshot` is the one tool that returns an image鈥攊t saves the capture to a local file and hands the model that path, so the page channel keeps its text shape. dsh 0.2.0 multimodal chat is a separate channel again: the side panel accepts PNG, JPEG, WebP, and GIF attachments when the host advertises image support.
+Browser operation is text-first: pages become structured text with a numbered inventory of interactive elements, and the model addresses those elements by number. `browser_screenshot` is the one tool that returns an image—it saves the capture to a local file and hands the model that path, so the page channel keeps its text shape. dsh 0.2.0 multimodal chat is a separate channel again: the side panel accepts PNG, JPEG, WebP, and GIF attachments when the host advertises image support.
 
 > [!IMPORTANT]
-> The workspace pins dsh 0.2.0-rc.2 as its minimum supported runtime, and the published package accepts the `0.2.1-alpha` line as well 鈥?`0.2.1-alpha.1` included, which is the build the plugin marketplace verifies against. Older DSH releases are not supported.
+> The workspace pins dsh 0.2.0-rc.2 as its minimum supported runtime, and the published package accepts the `0.2.1-alpha` line as well — `0.2.1-alpha.1` included, which is the build the plugin marketplace verifies against. Older DSH releases are not supported.
 
 ## Quick install
 
-Three routes. The integration contains both a dsh bridge plugin and a browser extension, and the extension half is always loaded unpacked in Chrome, which allows no other way 鈥?so unless you use the installer, the two halves are installed separately.
+Three routes. The integration contains both a dsh bridge plugin and a browser extension, and the extension half is always loaded unpacked in Chrome, which allows no other way — so unless you use the installer, the two halves are installed separately.
 
 **1. Plugin only**, prebuilt, with no build step and no Git:
 
@@ -58,7 +58,7 @@ This route needs Node.js 22+ and pnpm, because it builds both halves from source
 
 Whichever route you take, load or reload **dsh Browser Assistant** on the browser's extension page, and restart dsh if it is already running. See [Detailed installation and usage](#detailed-installation-and-usage) for prerequisites, startup commands, updates, and developer installation.
 
-Installing the plugin from repository source also works 鈥?`dsh plugin --profile web add github:DightEndless/dsh-browser#path:/packages/browser/bridge-browser` 鈥?but that package builds itself on install, and pnpm refuses to run build scripts for a git-hosted package until it is allowlisted, so this route needs a manual `allowBuilds` entry first. The release assets above need none, because they ship already built.
+Installing the plugin from repository source also works — `dsh plugin --profile web add github:DightEndless/dsh-browser#path:/packages/browser/bridge-browser` — but that package builds itself on install, and pnpm refuses to run build scripts for a git-hosted package until it is allowlisted, so this route needs a manual `allowBuilds` entry first. The release assets above need none, because they ship already built.
 
 > [!IMPORTANT]
 > The unscoped [`dsh-browser`](https://www.npmjs.com/package/dsh-browser) package on npm belongs to a different project and is not affiliated with this repository. This fork is not published on npm either: the prebuilt release assets above are the install, and the installer is the one-command alternative.
@@ -72,7 +72,7 @@ In a paired 60-run end-to-end benchmark on August 18, 2026, measured on the upst
 | **dsh Browser Control** | **30/30** | **5.32 s** | **3.4** |
 | Matched Playwright baseline | 30/30 | 6.67 s | 4.7 |
 
-The paired Playwright / extension duration ratio was **1.24** (95% CI **1.16鈥?.34**): Playwright took about 24% longer, or equivalently, dsh Browser Control reduced latency by about 20% and saved 1.35 seconds per task on average. The suite used six browser tasks, five deterministic seeds, the same DSH profile and model (`deepseek-v4-flash`), and independently validated page state. See the [benchmark methodology and reproduction guide](benchmark/README.md).
+The paired Playwright / extension duration ratio was **1.24** (95% CI **1.16–1.34**): Playwright took about 24% longer, or equivalently, dsh Browser Control reduced latency by about 20% and saved 1.35 seconds per task on average. The suite used six browser tasks, five deterministic seeds, the same DSH profile and model (`deepseek-v4-flash`), and independently validated page state. See the [benchmark methodology and reproduction guide](benchmark/README.md).
 
 ## Core capabilities
 
@@ -93,7 +93,7 @@ The paired Playwright / extension duration ratio was **1.24** (95% CI **1.16鈥?
 | Read region | `browser_get_text` | Lazy-loaded or partial page text |
 | List images | `browser_images` | Absolute image URLs from the main content region, one per line, with dimensions, alt text, and lazy/placeholder flags; resolves `zoomfile`/`file`/`data-src` channels, and takes `selector`, `limit`, `allFrames` |
 | Capture the view | `browser_screenshot` | Save the visible area as a local image and return its path for `read_image`; use it for visual content (captcha, chart, layout) or images `browser_images` cannot reach |
-| Wait | `browser_wait` | Page settle detection, or wait for a `selector`/`text` to appear 鈥?or to disappear with `gone` 鈥?within `timeoutMs` |
+| Wait | `browser_wait` | Page settle detection, or wait for a `selector`/`text` to appear — or to disappear with `gone` — within `timeoutMs` |
 | Send images | `session.prompt` / `session.attachment` | Host-capability-gated image drafts, image-only prompts, and durable history previews |
 | Quote a selection | side panel composer | Text you highlight in the page appears in the composer and is sent with your next message as fenced, attributed page content |
 
@@ -112,7 +112,7 @@ scripts/install.ps1
 - **Your real browser, not a headless copy**: the model works in the page you already have open, retaining logins, sessions, and cookies.
 - **A text-first page interface**: numbered controls, stable IDs across snapshots, delta updates, and masked sensitive values make pages operable without screenshots; user-attached chat images use dsh's separate multimodal message path.
 - **Pointing instead of describing**: highlight the passage you mean and the side panel quotes it, so "explain this" needs no page tour. The quote is captured only while a panel is open, and nothing is sent until you send the message.
-- **A narrow privacy boundary**: passwords and payment-card values are always rendered as `鈥⑩€⑩€⑩€ and never leave the page.
+- **A narrow privacy boundary**: passwords and payment-card values are always rendered as `••••` and never leave the page.
 - **A guarded bridge**: authenticated handshakes protect remote connections, privileged gateway methods reject non-loopback callers, and the extension binds tools to one user-controlled tab.
 
 ## Detailed installation and usage
@@ -181,8 +181,8 @@ Local Chrome use requires no configuration; Firefox requires the local bridge to
 **Side panel stays "Not connected"**
 
 - Make sure dsh web is running locally (default `http://127.0.0.1:3080`).
-- Verify the bridge is loaded: open `http://127.0.0.1:3080/ext/bridge-config`. It should return JSON such as `{"wsUrl":"ws://127.0.0.1:3080/ext/bridge"}`. If it returns a web page instead of JSON, the running dsh predates the bridge registration 鈥?restart dsh and refresh the page; the extension reconnects on its own.
-- The extension probes ports 3080, 3081, 3090, and 14389 automatically. If dsh runs on another port 鈥?or you use a remote `--host 0.0.0.0` deployment 鈥?set the address (and bridge token) in the panel settings. Firefox always requires the token.
+- Verify the bridge is loaded: open `http://127.0.0.1:3080/ext/bridge-config`. It should return JSON such as `{"wsUrl":"ws://127.0.0.1:3080/ext/bridge"}`. If it returns a web page instead of JSON, the running dsh predates the bridge registration — restart dsh and refresh the page; the extension reconnects on its own.
+- The extension probes ports 3080, 3081, 3090, and 14389 automatically. If dsh runs on another port — or you use a remote `--host 0.0.0.0` deployment — set the address (and bridge token) in the panel settings. Firefox always requires the token.
 
 ## Development
 
@@ -221,7 +221,7 @@ If you encounter `cache.hydratePrepared is not a function`, update the repositor
 - Privileged gateway methods such as `settings.*`, `credentials.*`, and `host.open*` reject non-loopback sources.
 - The browser-page pipeline is structured text by default, and `browser_screenshot` is the one browser tool that returns an image: the capture goes to a local file and the model is given that path, never the pixels inline. Explicitly attached chat images use dsh's durable attachment service. Password and payment-card values never leave the page.
 - When work begins, the assistant binds to the active tab (at prompt submission, or at the first direct browser-tool call). If you switch tabs manually, later browser actions pause and the side panel asks whether the assistant should continue on the original tab or follow the new one. Choosing the original tab permits background operation; the extension never silently retargets or changes your visible tab. Closing the controlled tab also pauses tools until you explicitly select the current page.
-- Text you highlight is captured only while a side panel is open and page sharing is not `off`, and never from password or payment-card fields. It stays inside the extension until you send the message, is dropped when you dismiss it or its page navigates or closes, and reaches the model inside the same untrusted-content boundary as page snapshots 鈥?including its source title and URL, which the page also controls.
+- Text you highlight is captured only while a side panel is open and page sharing is not `off`, and never from password or payment-card fields. It stays inside the extension until you send the message, is dropped when you dismiss it or its page navigates or closes, and reaches the model inside the same untrusted-content boundary as page snapshots — including its source title and URL, which the page also controls.
 - Page-authored text is wrapped as untrusted input. The default `auto` mode reads only the controlled tab without an extra prompt; privacy-sensitive users can select `ask` for per-read confirmation or `off` to block reads entirely. In `ask` mode, the read dialog can allow one read or persistently switch back to `auto`; this can be reversed in Settings. Read page text is sent to the selected model.
 - Click, type, keypress, navigation, history, and reload calls fail closed until the user approves them. An origin may be trusted for the current side-panel session (cleared when the last panel closes or the service worker restarts), while permanent trust is managed explicitly in Settings. Explicit cross-origin `browser_navigate` calls and unknown history destinations always prompt again.
 - **Allow unrestricted browser control** is an explicit global opt-in. It becomes active only after the setting is saved successfully; while enabled, page reads, page actions, and tab list/follow/close operations run without approval prompts. Calls capture their access mode when received, so enabling unrestricted control never retroactively elevates an existing restricted call. Disabling it takes effect immediately, cancels calls that have not dispatched an action, waits for already-dispatched browser operations to settle, and only then saves the restrictive setting. A rapid re-enable remains restricted until that revocation finishes, and concurrent saves persist in request order. Browser-protected DOM content remains inaccessible in either mode.
