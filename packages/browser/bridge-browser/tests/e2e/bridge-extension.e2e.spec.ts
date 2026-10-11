@@ -8,46 +8,16 @@ import { existsSync } from 'node:fs'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { createServer, type Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
-import { tmpdir, homedir } from 'node:os'
+import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { chromium, type BrowserContext } from 'playwright-core'
 import { BridgeServer } from '../../src/server.ts'
 import type { BrowserHostApi, HostRpcCall, HostRpcResult } from '../../src/host-api.ts'
+import { findChromiumExecutable } from '../helpers/chromium.mjs'
 
 const TOKEN = 'e2e0e2e0e2e0e2e0e2e0e2e0e2e0e2e0'
 const EXTENSION_DIR = resolve(import.meta.dirname, '../../../../../extensions/dsh-browser/dist')
-
-/**
- * Where playwright-core keeps its downloaded browsers on this platform. The
- * cache root used to be spelled out as the macOS path, so this smoke test could
- * only ever find a browser on a Mac and quietly skipped everywhere else.
- */
-function playwrightCacheRoot(): string {
-  if (process.platform === 'win32') {
-    return join(process.env.LOCALAPPDATA ?? join(homedir(), 'AppData', 'Local'), 'ms-playwright')
-  }
-  if (process.platform === 'darwin') return join(homedir(), 'Library', 'Caches', 'ms-playwright')
-  return join(process.env.XDG_CACHE_HOME ?? join(homedir(), '.cache'), 'ms-playwright')
-}
-
-function chromiumExecutable(): string | undefined {
-  const fromEnv = process.env.PLAYWRIGHT_CHROMIUM_PATH
-  if (fromEnv !== undefined && existsSync(fromEnv)) return fromEnv
-  const cacheRoot = playwrightCacheRoot()
-  if (!existsSync(cacheRoot)) return undefined
-  for (const dir of ['chromium-1217', 'chromium-1226', 'chromium-1181']) {
-    for (const candidate of [
-      join(cacheRoot, dir, 'chrome-mac-arm64', 'Google Chrome for Testing.app', 'Contents', 'MacOS', 'Google Chrome for Testing'),
-      join(cacheRoot, dir, 'chrome-mac', 'Chromium.app', 'Contents', 'MacOS', 'Chromium'),
-      join(cacheRoot, dir, 'chrome-linux', 'chrome'),
-      join(cacheRoot, dir, 'chrome-win', 'chrome.exe'),
-    ]) {
-      if (existsSync(candidate)) return candidate
-    }
-  }
-  return undefined
-}
 
 function abortWait(signal: AbortSignal): Promise<void> {
   if (signal.aborted) return Promise.resolve()
@@ -65,7 +35,10 @@ let port: number | undefined
 const calls: HostRpcCall[] = []
 
 beforeAll(async () => {
-  executable = chromiumExecutable()
+  executable = await findChromiumExecutable(undefined, { requireExtensions: true })
+  if (executable === undefined && process.env.DSH_REQUIRE_BROWSER === '1') {
+    throw new Error('DSH_REQUIRE_BROWSER=1 is set, but no usable Chromium executable was found.')
+  }
   if (executable === undefined || !existsSync(join(EXTENSION_DIR, 'manifest.json'))) return
 
   const api: BrowserHostApi = {
@@ -127,13 +100,19 @@ afterAll(async () => {
 })
 
 describe('extension ↔ migrated bridge smoke', () => {
-  it('connects, negotiates caps, and initializes a Session through the private bridge protocol', { timeout: 60_000 }, async () => {
+  it('connects, negotiates caps, and initializes a Session through the private bridge protocol', { timeout: 60_000 }, async (ctx) => {
     if (executable === undefined) {
-      console.warn('SKIP: no usable Chromium')
+      if (process.env.DSH_REQUIRE_BROWSER === '1') {
+        throw new Error('DSH_REQUIRE_BROWSER=1 is set, but no usable Chromium executable was found.')
+      }
+      ctx.skip()
       return
     }
     if (browser === undefined || port === undefined) {
-      console.warn('SKIP: extension dist not built')
+      if (process.env.DSH_REQUIRE_BROWSER === '1') {
+        throw new Error('DSH_REQUIRE_BROWSER=1 is set, but browser could not be launched or extension dist is missing.')
+      }
+      ctx.skip()
       return
     }
 
