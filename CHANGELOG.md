@@ -10,6 +10,26 @@ change:
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 0.3.2 — 2026-10-11
+
+### Fixed
+
+- **`@deepseek-ai/cordis` no longer pins an alpha host to the rc line.** 0.3.1 widened
+  the `dsh-*` peers but left cordis at `~4.0.4`, and that alone kept the install broken:
+  every `0.2.1-alpha.1` package declares `peer @deepseek-ai/cordis@~4.0.5-alpha.1`, so npm
+  resolved cordis down to 4.0.4 and then failed with `ERESOLVE` on the alpha packages.
+  The range is now `~4.0.4 || ~4.0.5-alpha.1`, which the rc line and the alpha line each
+  satisfy. Found by installing the published 0.3.1 tarball next to the alpha peers in an
+  empty project — the peer check failed there, not in the source tree.
+
+### Notes
+
+- 0.3.1 was published 20 minutes earlier and cannot be republished; the fix ships as
+  0.3.2. The two releases are otherwise identical, and the extension is unchanged again:
+  its zip differs from 0.3.1 by the manifest version alone.
+- Verified after the fix: `npm install @dightendless/dsh-bridge-browser@0.3.2` alongside
+  the `0.2.1-alpha.1` peer set resolves with exit 0 in an empty project.
+
 ## 0.3.1 — 2026-10-11
 
 ### Changed

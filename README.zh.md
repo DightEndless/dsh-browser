@@ -1,104 +1,84 @@
-# dsh 浏览器操作
-
+# dsh 娴忚鍣ㄦ搷浣?
 > [!NOTE]
-> **打开浏览器扩展侧边栏，就能原地接管你当前正在浏览的网页。**
+> **鎵撳紑娴忚鍣ㄦ墿灞曚晶杈规爮锛屽氨鑳藉師鍦版帴绠′綘褰撳墠姝ｅ湪娴忚鐨勭綉椤点€?*
 >
-> **本仓库是 [omdsh-dev/dsh-browser](https://github.com/omdsh-dev/dsh-browser) 的 fork**，补齐了上游没有的能力：视口与整页 `browser_screenshot`、`browser_hover`、`browser_click_at`、`browser_drag`、`browser_batch`、`browser_eval`、`browser_upload`、`browser_images`。桥接包使用独立的包名 `@dightendless/dsh-bridge-browser`，因此本 fork 与上游包可以同时存在于同一个 dsh profile 中，不会互相顶替。
-
-[English](README.md) | **中文**
+> **鏈粨搴撴槸 [omdsh-dev/dsh-browser](https://github.com/omdsh-dev/dsh-browser) 鐨?fork**锛岃ˉ榻愪簡涓婃父娌℃湁鐨勮兘鍔涳細瑙嗗彛涓庢暣椤?`browser_screenshot`銆乣browser_hover`銆乣browser_click_at`銆乣browser_drag`銆乣browser_batch`銆乣browser_eval`銆乣browser_upload`銆乣browser_images`銆傛ˉ鎺ュ寘浣跨敤鐙珛鐨勫寘鍚?`@dightendless/dsh-bridge-browser`锛屽洜姝ゆ湰 fork 涓庝笂娓稿寘鍙互鍚屾椂瀛樺湪浜庡悓涓€涓?dsh profile 涓紝涓嶄細浜掔浉椤舵浛銆?
+[English](README.md) | **涓枃**
 
 [![npm version](https://img.shields.io/npm/v/%40dightendless%2Fdsh-bridge-browser?label=npm&color=cb3837)](https://www.npmjs.com/package/@dightendless/dsh-bridge-browser)
 
-<img width="1672" alt="dsh 浏览器操作：本 fork 新增的工具，围绕一台带有编号元素清单与侧边栏的浏览器窗口排布" src="packages/browser/bridge-browser/assets/screenshots/cover.png" />
+<img width="1672" alt="dsh 娴忚鍣ㄦ搷浣滐細鏈?fork 鏂板鐨勫伐鍏凤紝鍥寸粫涓€鍙板甫鏈夌紪鍙峰厓绱犳竻鍗曚笌渚ц竟鏍忕殑娴忚鍣ㄧ獥鍙ｆ帓甯? src="packages/browser/bridge-browser/assets/screenshots/cover.png" />
 
-<img width="1672" alt="侧边栏已连接，正在读取一个页面" src="packages/browser/bridge-browser/assets/screenshots/browser-and-panel.png" />
+<img width="1672" alt="渚ц竟鏍忓凡杩炴帴锛屾鍦ㄨ鍙栦竴涓〉闈? src="packages/browser/bridge-browser/assets/screenshots/browser-and-panel.png" />
 
-把 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 连接到你正在使用的 Chrome 或 Firefox 标签页。模型可以读取页面内容、操作控件、导航和管理标签页，同时保留登录态、会话和 Cookie。侧边栏提供对话界面。
-
-`dsh` 是由 DeepSeek AI 开发的开源、插件化 agent harness（智能体框架）。本仓库将配套的浏览器桥插件与 Chrome/Firefox MV3 扩展组成一个独立的 pnpm workspace。
-
-浏览器操作以文本为主：页面会转换为结构化文本和带编号的交互元素清单，模型通过编号定位元素。`browser_screenshot` 是唯一会返回图片的工具——它把截图存成本地文件，只把路径交给模型，因此页面通道依然保持文本形态。dsh 0.2.0 的多模态对话是另一条独立通道：宿主声明图片能力时，侧栏可发送 PNG、JPEG、WebP 和 GIF。
-
+鎶?[DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 杩炴帴鍒颁綘姝ｅ湪浣跨敤鐨?Chrome 鎴?Firefox 鏍囩椤点€傛ā鍨嬪彲浠ヨ鍙栭〉闈㈠唴瀹广€佹搷浣滄帶浠躲€佸鑸拰绠＄悊鏍囩椤碉紝鍚屾椂淇濈暀鐧诲綍鎬併€佷細璇濆拰 Cookie銆備晶杈规爮鎻愪緵瀵硅瘽鐣岄潰銆?
+`dsh` 鏄敱 DeepSeek AI 寮€鍙戠殑寮€婧愩€佹彃浠跺寲 agent harness锛堟櫤鑳戒綋妗嗘灦锛夈€傛湰浠撳簱灏嗛厤濂楃殑娴忚鍣ㄦˉ鎻掍欢涓?Chrome/Firefox MV3 鎵╁睍缁勬垚涓€涓嫭绔嬬殑 pnpm workspace銆?
+娴忚鍣ㄦ搷浣滀互鏂囨湰涓轰富锛氶〉闈細杞崲涓虹粨鏋勫寲鏂囨湰鍜屽甫缂栧彿鐨勪氦浜掑厓绱犳竻鍗曪紝妯″瀷閫氳繃缂栧彿瀹氫綅鍏冪礌銆俙browser_screenshot` 鏄敮涓€浼氳繑鍥炲浘鐗囩殑宸ュ叿鈥斺€斿畠鎶婃埅鍥惧瓨鎴愭湰鍦版枃浠讹紝鍙妸璺緞浜ょ粰妯″瀷锛屽洜姝ら〉闈㈤€氶亾渚濈劧淇濇寔鏂囨湰褰㈡€併€俤sh 0.2.0 鐨勫妯℃€佸璇濇槸鍙︿竴鏉＄嫭绔嬮€氶亾锛氬涓诲０鏄庡浘鐗囪兘鍔涙椂锛屼晶鏍忓彲鍙戦€?PNG銆丣PEG銆乄ebP 鍜?GIF銆?
 > [!IMPORTANT]
-> 当前工作区固定使用 dsh 0.2.0-rc.2 作为最低支持版本；发布包同时接受 `0.2.1-alpha` 一线（含 `0.2.1-alpha.1`，也就是插件市场用于验证的那个版本）。不再支持更旧的 DSH。
-
-## 快速安装
-
-有三条路线。本项目同时包含 dsh bridge plugin 和浏览器扩展，而扩展这一半在 Chrome 里只能以「加载已解压」的方式安装——浏览器不提供别的途径。所以除非用安装器，两半是分开装的。
-
-**1. 只装插件**（已预构建，无需构建步骤，也不需要 Git）：
+> 褰撳墠宸ヤ綔鍖哄浐瀹氫娇鐢?dsh 0.2.0-rc.2 浣滀负鏈€浣庢敮鎸佺増鏈紱鍙戝竷鍖呭悓鏃舵帴鍙?`0.2.1-alpha` 涓€绾匡紙鍚?`0.2.1-alpha.1`锛屼篃灏辨槸鎻掍欢甯傚満鐢ㄤ簬楠岃瘉鐨勯偅涓増鏈級銆備笉鍐嶆敮鎸佹洿鏃х殑 DSH銆?
+## 蹇€熷畨瑁?
+鏈変笁鏉¤矾绾裤€傛湰椤圭洰鍚屾椂鍖呭惈 dsh bridge plugin 鍜屾祻瑙堝櫒鎵╁睍锛岃€屾墿灞曡繖涓€鍗婂湪 Chrome 閲屽彧鑳戒互銆屽姞杞藉凡瑙ｅ帇銆嶇殑鏂瑰紡瀹夎鈥斺€旀祻瑙堝櫒涓嶆彁渚涘埆鐨勯€斿緞銆傛墍浠ラ櫎闈炵敤瀹夎鍣紝涓ゅ崐鏄垎寮€瑁呯殑銆?
+**1. 鍙鎻掍欢**锛堝凡棰勬瀯寤猴紝鏃犻渶鏋勫缓姝ラ锛屼篃涓嶉渶瑕?Git锛夛細
 
 ```sh
-dsh plugin --profile web add https://github.com/DightEndless/dsh-browser/releases/download/v0.3.1/dightendless-dsh-bridge-browser-0.3.1.tgz
+dsh plugin --profile web add https://github.com/DightEndless/dsh-browser/releases/download/v0.3.2/dightendless-dsh-bridge-browser-0.3.2.tgz
 ```
 
-同一个包也发布在 npm 上：[`@dightendless/dsh-bridge-browser`](https://www.npmjs.com/package/@dightendless/dsh-bridge-browser)（`npm i @dightendless/dsh-bridge-browser`），适合从 registry 而不是发行资产解析插件的环境。
-
-**2. 只装扩展**（已预构建）：下载
-[`dsh-browser-extension-0.3.1.zip`](https://github.com/DightEndless/dsh-browser/releases/download/v0.3.1/dsh-browser-extension-0.3.1.zip)，
-解压后打开 `chrome://extensions`（Edge 是 `edge://extensions`），开启右上角**开发者模式**，点
-**加载已解压的扩展程序**，选中解压出来的那个文件夹。
-
-路线 1 加路线 2 就是完整安装，而且**都不需要 Node、pnpm 或 Git**。
-
-**3. 两半一起装**，用一行安装器：它会构建并注册桥插件、把 Chrome 扩展构建到 `~/.dsh/browser-extension`，然后打开 `chrome://extensions`：
-
-macOS 与 Linux：
-
+鍚屼竴涓寘涔熷彂甯冨湪 npm 涓婏細[`@dightendless/dsh-bridge-browser`](https://www.npmjs.com/package/@dightendless/dsh-bridge-browser)锛坄npm i @dightendless/dsh-bridge-browser`锛夛紝閫傚悎浠?registry 鑰屼笉鏄彂琛岃祫浜цВ鏋愭彃浠剁殑鐜銆?
+**2. 鍙鎵╁睍**锛堝凡棰勬瀯寤猴級锛氫笅杞?[`dsh-browser-extension-0.3.2.zip`](https://github.com/DightEndless/dsh-browser/releases/download/v0.3.2/dsh-browser-extension-0.3.2.zip)锛?瑙ｅ帇鍚庢墦寮€ `chrome://extensions`锛圗dge 鏄?`edge://extensions`锛夛紝寮€鍚彸涓婅**寮€鍙戣€呮ā寮?*锛岀偣
+**鍔犺浇宸茶В鍘嬬殑鎵╁睍绋嬪簭**锛岄€変腑瑙ｅ帇鍑烘潵鐨勯偅涓枃浠跺す銆?
+璺嚎 1 鍔犺矾绾?2 灏辨槸瀹屾暣瀹夎锛岃€屼笖**閮戒笉闇€瑕?Node銆乸npm 鎴?Git**銆?
+**3. 涓ゅ崐涓€璧疯**锛岀敤涓€琛屽畨瑁呭櫒锛氬畠浼氭瀯寤哄苟娉ㄥ唽妗ユ彃浠躲€佹妸 Chrome 鎵╁睍鏋勫缓鍒?`~/.dsh/browser-extension`锛岀劧鍚庢墦寮€ `chrome://extensions`锛?
+macOS 涓?Linux锛?
 ```sh
 curl -fsSL https://raw.githubusercontent.com/DightEndless/dsh-browser/refs/heads/main/scripts/install.sh | bash
 ```
 
-Windows（PowerShell）：
+Windows锛圥owerShell锛夛細
 
 ```powershell
 $s="$env:TEMP\dsh-install.ps1"; irm https://raw.githubusercontent.com/DightEndless/dsh-browser/refs/heads/main/scripts/install.ps1 -OutFile $s; powershell -NoProfile -ExecutionPolicy Bypass -File $s
 ```
 
-这条路线需要 Node.js 22+ 与 pnpm，因为它要从源码构建两半。
-
-无论走哪条路线，最后都在浏览器扩展页面里加载或重新加载 **dsh 浏览器助手**；如果 dsh 已经在运行，装完请重启。前置要求、启动命令、更新方式和开发者安装详见[详细安装与使用](#详细安装与使用)。
-
-也可以从仓库源码安装插件——`dsh plugin --profile web add github:DightEndless/dsh-browser#path:/packages/browser/bridge-browser`——但该包会在安装时自行构建，而 pnpm 对 git 来源的包默认拒绝执行构建脚本，必须先手工加一条 `allowBuilds` 才会构建。上面的 release 资产没有这个问题，因为它们已经是构建好的产物。
-
+杩欐潯璺嚎闇€瑕?Node.js 22+ 涓?pnpm锛屽洜涓哄畠瑕佷粠婧愮爜鏋勫缓涓ゅ崐銆?
+鏃犺璧板摢鏉¤矾绾匡紝鏈€鍚庨兘鍦ㄦ祻瑙堝櫒鎵╁睍椤甸潰閲屽姞杞芥垨閲嶆柊鍔犺浇 **dsh 娴忚鍣ㄥ姪鎵?*锛涘鏋?dsh 宸茬粡鍦ㄨ繍琛岋紝瑁呭畬璇烽噸鍚€傚墠缃姹傘€佸惎鍔ㄥ懡浠ゃ€佹洿鏂版柟寮忓拰寮€鍙戣€呭畨瑁呰瑙乕璇︾粏瀹夎涓庝娇鐢╙(#璇︾粏瀹夎涓庝娇鐢?銆?
+涔熷彲浠ヤ粠浠撳簱婧愮爜瀹夎鎻掍欢鈥斺€擿dsh plugin --profile web add github:DightEndless/dsh-browser#path:/packages/browser/bridge-browser`鈥斺€斾絾璇ュ寘浼氬湪瀹夎鏃惰嚜琛屾瀯寤猴紝鑰?pnpm 瀵?git 鏉ユ簮鐨勫寘榛樿鎷掔粷鎵ц鏋勫缓鑴氭湰锛屽繀椤诲厛鎵嬪伐鍔犱竴鏉?`allowBuilds` 鎵嶄細鏋勫缓銆備笂闈㈢殑 release 璧勪骇娌℃湁杩欎釜闂锛屽洜涓哄畠浠凡缁忔槸鏋勫缓濂界殑浜х墿銆?
 > [!IMPORTANT]
-> npm 上未加 scope 的 [`dsh-browser`](https://www.npmjs.com/package/dsh-browser) 包属于另一个项目，与本仓库无关。本 fork 同样没有发布 npm 包：上方的预构建资产就是安装方式，安装器则是"一条命令装齐"的替代方案。
+> npm 涓婃湭鍔?scope 鐨?[`dsh-browser`](https://www.npmjs.com/package/dsh-browser) 鍖呭睘浜庡彟涓€涓」鐩紝涓庢湰浠撳簱鏃犲叧銆傛湰 fork 鍚屾牱娌℃湁鍙戝竷 npm 鍖咃細涓婃柟鐨勯鏋勫缓璧勪骇灏辨槸瀹夎鏂瑰紡锛屽畨瑁呭櫒鍒欐槸"涓€鏉″懡浠よ榻?鐨勬浛浠ｆ柟妗堛€?
+## 鎬ц兘鍩哄噯
 
-## 性能基准
+鍦?2026 骞?8 鏈?18 鏃ュ畬鎴愮殑 60 娆￠厤瀵圭鍒扮璇勬祴涓紙璇ヨ瘎娴嬪湪涓婃父椤圭洰涓婃祴寰楋紝鏈?fork 涓庝箣鍏辩敤鍚屼竴濂楅〉闈㈠伐鍏烽潰锛夛紝涓や釜鍚庣鍒嗛厤鍒扮殑 30 娆¤繍琛屽潎鍏ㄩ儴鎴愬姛锛沝sh 娴忚鍣ㄦ搷浣滀娇鐢ㄤ簡鏇村皯鐨勬ā鍨?宸ュ叿杞锛屽苟浠ユ洿鐭椂闂村畬鎴愪换鍔★細
 
-在 2026 年 8 月 18 日完成的 60 次配对端到端评测中（该评测在上游项目上测得，本 fork 与之共用同一套页面工具面），两个后端分配到的 30 次运行均全部成功；dsh 浏览器操作使用了更少的模型/工具轮次，并以更短时间完成任务：
-
-| 后端 | 成功率 | 平均端到端耗时 | 平均浏览器工具调用 |
+| 鍚庣 | 鎴愬姛鐜?| 骞冲潎绔埌绔€楁椂 | 骞冲潎娴忚鍣ㄥ伐鍏疯皟鐢?|
 |---|---:|---:|---:|
-| **dsh 浏览器操作** | **30/30** | **5.32 秒** | **3.4** |
-| 对齐工具契约的 Playwright 基线 | 30/30 | 6.67 秒 | 4.7 |
+| **dsh 娴忚鍣ㄦ搷浣?* | **30/30** | **5.32 绉?* | **3.4** |
+| 瀵归綈宸ュ叿濂戠害鐨?Playwright 鍩虹嚎 | 30/30 | 6.67 绉?| 4.7 |
 
-Playwright / 扩展的配对耗时比为 **1.24**（95% CI **1.16–1.34**）：Playwright 耗时约多 24%；等价地说，dsh 浏览器操作将延迟降低约 20%，每个任务平均节省 1.35 秒。评测使用 6 个浏览器任务、5 个确定性 seed、相同的 DSH profile 与模型（`deepseek-v4-flash`），并通过独立页面状态验证结果。详见[评测方法与复现说明](benchmark/README.md)。
+Playwright / 鎵╁睍鐨勯厤瀵硅€楁椂姣斾负 **1.24**锛?5% CI **1.16鈥?.34**锛夛細Playwright 鑰楁椂绾﹀ 24%锛涚瓑浠峰湴璇达紝dsh 娴忚鍣ㄦ搷浣滃皢寤惰繜闄嶄綆绾?20%锛屾瘡涓换鍔″钩鍧囪妭鐪?1.35 绉掋€傝瘎娴嬩娇鐢?6 涓祻瑙堝櫒浠诲姟銆? 涓‘瀹氭€?seed銆佺浉鍚岀殑 DSH profile 涓庢ā鍨嬶紙`deepseek-v4-flash`锛夛紝骞堕€氳繃鐙珛椤甸潰鐘舵€侀獙璇佺粨鏋溿€傝瑙乕璇勬祴鏂规硶涓庡鐜拌鏄嶿(benchmark/README.md)銆?
+## 鏍稿績鑳藉姏
 
-## 核心能力
-
-| 能力 | 工具 | 说明 |
+| 鑳藉姏 | 宸ュ叿 | 璇存槑 |
 |---|---|---|
-| 读取页面 | `browser_snapshot` | 结构化文本快照：标题/URL/正文/编号交互清单/表单字段（敏感值掩码）；`delta: true` 只返回变化 |
-| 点击元素 | `browser_click` | 按编号点击链接/按钮/复选框等 |
-| 按坐标点击 | `browser_click_at` | 用受信任的鼠标输入点击视口内的位置；`x`/`y` 为视口比例 |
-| 填写表单 | `browser_type` | 输入文本（React/Vue 受控组件兼容）；按可见文字或 value 选下拉框；勾选/取消复选框与单选框；`replace` 清空重填 |
-| 上传文件 | `browser_upload` | 按路径把本地文件挂到文件输入框；审批框会显示文件路径 |
-| 执行脚本 | `browser_eval` | 通过 DevTools 协议在页面里求值 JavaScript 并返回结果；需要 `debugger` 权限 |
-| 按键 | `browser_press` | Enter/Tab/Escape/方向键等。Tab 真正移动焦点，Enter/空格真正触发页面默认行为 |
-| 滚动 | `browser_scroll` | 视口滚动（up/down/top/bottom） |
-| 页面导航 | `browser_navigate` / `browser_open_tab` / `browser_back` / `browser_forward` / `browser_reload` | 受控标签页内导航，或新开标签页并跟随（`active:false` 时保持当前页在前台） |
-| 列出标签页 | `browser_list_tabs` | 列出可访问标签页的稳定 ID、标题、URL、窗口/顺序以及活动/受控状态 |
-| 跟随标签页 | `browser_follow_tab` | 将后续浏览器工具绑定到 `browser_list_tabs` 返回的标签页，而不激活该标签页 |
-| 关闭标签页 | `browser_close_tab` | 关闭 `browser_list_tabs` 返回的标签页 |
-| 读取区域 | `browser_get_text` | 懒加载内容 / 局部文本 |
-| 列出图片 | `browser_images` | 正文区的绝对图片地址，每张一行，带宽高、alt 和懒加载/占位标记；会解析 `zoomfile`/`file`/`data-src` 通道，支持 `selector`、`limit`、`allFrames` |
-| 截取画面 | `browser_screenshot` | 把可见区域存成本地图片并返回路径供 `read_image` 查看；页面含义靠视觉（验证码、图表、排版）或图片本身拿不到时用它 |
-| 等待 | `browser_wait` | 页面稳定检测；也可等 `selector`/`text` 出现，或配合 `gone` 等它消失，用 `timeoutMs` 限时 |
-| 发送图片 | `session.prompt` / `session.attachment` | 按宿主能力启用图片草稿、纯图片消息和持久历史预览 |
-| 引用选中内容 | 侧栏输入框 | 在页面里划选的文字会出现在输入框，随下一条消息一起发送，并带上来源与不可信内容边界 |
+| 璇诲彇椤甸潰 | `browser_snapshot` | 缁撴瀯鍖栨枃鏈揩鐓э細鏍囬/URL/姝ｆ枃/缂栧彿浜や簰娓呭崟/琛ㄥ崟瀛楁锛堟晱鎰熷€兼帺鐮侊級锛沗delta: true` 鍙繑鍥炲彉鍖?|
+| 鐐瑰嚮鍏冪礌 | `browser_click` | 鎸夌紪鍙风偣鍑婚摼鎺?鎸夐挳/澶嶉€夋绛?|
+| 鎸夊潗鏍囩偣鍑?| `browser_click_at` | 鐢ㄥ彈淇′换鐨勯紶鏍囪緭鍏ョ偣鍑昏鍙ｅ唴鐨勪綅缃紱`x`/`y` 涓鸿鍙ｆ瘮渚?|
+| 濉啓琛ㄥ崟 | `browser_type` | 杈撳叆鏂囨湰锛圧eact/Vue 鍙楁帶缁勪欢鍏煎锛夛紱鎸夊彲瑙佹枃瀛楁垨 value 閫変笅鎷夋锛涘嬀閫?鍙栨秷澶嶉€夋涓庡崟閫夋锛沗replace` 娓呯┖閲嶅～ |
+| 涓婁紶鏂囦欢 | `browser_upload` | 鎸夎矾寰勬妸鏈湴鏂囦欢鎸傚埌鏂囦欢杈撳叆妗嗭紱瀹℃壒妗嗕細鏄剧ず鏂囦欢璺緞 |
+| 鎵ц鑴氭湰 | `browser_eval` | 閫氳繃 DevTools 鍗忚鍦ㄩ〉闈㈤噷姹傚€?JavaScript 骞惰繑鍥炵粨鏋滐紱闇€瑕?`debugger` 鏉冮檺 |
+| 鎸夐敭 | `browser_press` | Enter/Tab/Escape/鏂瑰悜閿瓑銆俆ab 鐪熸绉诲姩鐒︾偣锛孍nter/绌烘牸鐪熸瑙﹀彂椤甸潰榛樿琛屼负 |
+| 婊氬姩 | `browser_scroll` | 瑙嗗彛婊氬姩锛坲p/down/top/bottom锛?|
+| 椤甸潰瀵艰埅 | `browser_navigate` / `browser_open_tab` / `browser_back` / `browser_forward` / `browser_reload` | 鍙楁帶鏍囩椤靛唴瀵艰埅锛屾垨鏂板紑鏍囩椤靛苟璺熼殢锛坄active:false` 鏃朵繚鎸佸綋鍓嶉〉鍦ㄥ墠鍙帮級 |
+| 鍒楀嚭鏍囩椤?| `browser_list_tabs` | 鍒楀嚭鍙闂爣绛鹃〉鐨勭ǔ瀹?ID銆佹爣棰樸€乁RL銆佺獥鍙?椤哄簭浠ュ強娲诲姩/鍙楁帶鐘舵€?|
+| 璺熼殢鏍囩椤?| `browser_follow_tab` | 灏嗗悗缁祻瑙堝櫒宸ュ叿缁戝畾鍒?`browser_list_tabs` 杩斿洖鐨勬爣绛鹃〉锛岃€屼笉婵€娲昏鏍囩椤?|
+| 鍏抽棴鏍囩椤?| `browser_close_tab` | 鍏抽棴 `browser_list_tabs` 杩斿洖鐨勬爣绛鹃〉 |
+| 璇诲彇鍖哄煙 | `browser_get_text` | 鎳掑姞杞藉唴瀹?/ 灞€閮ㄦ枃鏈?|
+| 鍒楀嚭鍥剧墖 | `browser_images` | 姝ｆ枃鍖虹殑缁濆鍥剧墖鍦板潃锛屾瘡寮犱竴琛岋紝甯﹀楂樸€乤lt 鍜屾噿鍔犺浇/鍗犱綅鏍囪锛涗細瑙ｆ瀽 `zoomfile`/`file`/`data-src` 閫氶亾锛屾敮鎸?`selector`銆乣limit`銆乣allFrames` |
+| 鎴彇鐢婚潰 | `browser_screenshot` | 鎶婂彲瑙佸尯鍩熷瓨鎴愭湰鍦板浘鐗囧苟杩斿洖璺緞渚?`read_image` 鏌ョ湅锛涢〉闈㈠惈涔夐潬瑙嗚锛堥獙璇佺爜銆佸浘琛ㄣ€佹帓鐗堬級鎴栧浘鐗囨湰韬嬁涓嶅埌鏃剁敤瀹?|
+| 绛夊緟 | `browser_wait` | 椤甸潰绋冲畾妫€娴嬶紱涔熷彲绛?`selector`/`text` 鍑虹幇锛屾垨閰嶅悎 `gone` 绛夊畠娑堝け锛岀敤 `timeoutMs` 闄愭椂 |
+| 鍙戦€佸浘鐗?| `session.prompt` / `session.attachment` | 鎸夊涓昏兘鍔涘惎鐢ㄥ浘鐗囪崏绋裤€佺函鍥剧墖娑堟伅鍜屾寔涔呭巻鍙查瑙?|
+| 寮曠敤閫変腑鍐呭 | 渚ф爮杈撳叆妗?| 鍦ㄩ〉闈㈤噷鍒掗€夌殑鏂囧瓧浼氬嚭鐜板湪杈撳叆妗嗭紝闅忎笅涓€鏉℃秷鎭竴璧峰彂閫侊紝骞跺甫涓婃潵婧愪笌涓嶅彲淇″唴瀹硅竟鐣?|
 
-## 组成
+## 缁勬垚
 
 ```
 packages/browser/bridge-browser/
@@ -108,87 +88,63 @@ scripts/install.sh
 scripts/install.ps1
 ```
 
-## 为什么这样设计
-
-- **使用你的真实浏览器，而不是无头副本**：模型操作你已经打开的页面，登录态、会话和 Cookie 均会保留。
-- **以文本为主的页面接口**：编号控件、跨快照稳定 ID、delta 更新和敏感值掩码，使模型无需截图也能操作页面；用户主动添加的对话图片走 dsh 独立的多模态消息通道。
-- **用「指」代替「描述」**：直接划选你要问的那段文字，侧栏会把它引用下来，说「解释这个」不必再描述整页内容。只有侧栏打开时才会捕获，并且在你发送消息之前不会离开浏览器。
-- **收窄隐私边界**：密码和支付卡字段始终显示为 `••••`，字段值不会离开页面。
-- **受保护的桥连接**：远程连接使用认证握手，特权网关方法拒绝非回环调用方，扩展把工具绑定到一个由用户控制的标签页。
-
-## 详细安装与使用
-
-前置要求：Node.js `^22.19` 或 `>=24`、Corepack/pnpm，以及 Chrome 116+ 或 Firefox 140+。Windows 还需要系统自带的 Windows PowerShell 5.1，或 PowerShell 7+。
-
-### 安装或更新
-
-托管安装请运行：
+## 涓轰粈涔堣繖鏍疯璁?
+- **浣跨敤浣犵殑鐪熷疄娴忚鍣紝鑰屼笉鏄棤澶村壇鏈?*锛氭ā鍨嬫搷浣滀綘宸茬粡鎵撳紑鐨勯〉闈紝鐧诲綍鎬併€佷細璇濆拰 Cookie 鍧囦細淇濈暀銆?- **浠ユ枃鏈负涓荤殑椤甸潰鎺ュ彛**锛氱紪鍙锋帶浠躲€佽法蹇収绋冲畾 ID銆乨elta 鏇存柊鍜屾晱鎰熷€兼帺鐮侊紝浣挎ā鍨嬫棤闇€鎴浘涔熻兘鎿嶄綔椤甸潰锛涚敤鎴蜂富鍔ㄦ坊鍔犵殑瀵硅瘽鍥剧墖璧?dsh 鐙珛鐨勫妯℃€佹秷鎭€氶亾銆?- **鐢ㄣ€屾寚銆嶄唬鏇裤€屾弿杩般€?*锛氱洿鎺ュ垝閫変綘瑕侀棶鐨勯偅娈垫枃瀛楋紝渚ф爮浼氭妸瀹冨紩鐢ㄤ笅鏉ワ紝璇淬€岃В閲婅繖涓€嶄笉蹇呭啀鎻忚堪鏁撮〉鍐呭銆傚彧鏈変晶鏍忔墦寮€鏃舵墠浼氭崟鑾凤紝骞朵笖鍦ㄤ綘鍙戦€佹秷鎭箣鍓嶄笉浼氱寮€娴忚鍣ㄣ€?- **鏀剁獎闅愮杈圭晫**锛氬瘑鐮佸拰鏀粯鍗″瓧娈靛缁堟樉绀轰负 `鈥⑩€⑩€⑩€锛屽瓧娈靛€间笉浼氱寮€椤甸潰銆?- **鍙椾繚鎶ょ殑妗ヨ繛鎺?*锛氳繙绋嬭繛鎺ヤ娇鐢ㄨ璇佹彙鎵嬶紝鐗规潈缃戝叧鏂规硶鎷掔粷闈炲洖鐜皟鐢ㄦ柟锛屾墿灞曟妸宸ュ叿缁戝畾鍒颁竴涓敱鐢ㄦ埛鎺у埗鐨勬爣绛鹃〉銆?
+## 璇︾粏瀹夎涓庝娇鐢?
+鍓嶇疆瑕佹眰锛歂ode.js `^22.19` 鎴?`>=24`銆丆orepack/pnpm锛屼互鍙?Chrome 116+ 鎴?Firefox 140+銆俉indows 杩橀渶瑕佺郴缁熻嚜甯︾殑 Windows PowerShell 5.1锛屾垨 PowerShell 7+銆?
+### 瀹夎鎴栨洿鏂?
+鎵樼瀹夎璇疯繍琛岋細
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/DightEndless/dsh-browser/refs/heads/main/scripts/install.sh | bash
 ```
 
-Windows 请运行：
+Windows 璇疯繍琛岋細
 
 ```powershell
 $s="$env:TEMP\dsh-install.ps1"; irm https://raw.githubusercontent.com/DightEndless/dsh-browser/refs/heads/main/scripts/install.ps1 -OutFile $s; powershell -NoProfile -ExecutionPolicy Bypass -File $s
 ```
 
-安装器会下载本仓库的默认分支、构建并注册桥插件、把 Chrome 扩展构建到 `~/.dsh/browser-extension`，然后打开 `chrome://extensions`。首次安装时，请把该目录作为已解压扩展加载；更新时点击**重新加载**。如果 dsh 已在运行，请重启。
-
-`scripts/install.sh` 覆盖 macOS 与 Linux，`scripts/install.ps1` 覆盖 Windows；两者写入同一个托管工作区和同一份安装元数据。当系统提供剪贴板工具（`pbcopy`、`wl-copy`、`xclip`、`xsel` 或 PowerShell 的 `Set-Clipboard`）时，安装器会把扩展路径复制到剪贴板；无论是否复制成功都会打印该路径。若未检测到 Chrome/Chromium，安装器会打印对应的安装命令；设置 `DSH_INSTALL_BROWSER=1` 可让安装器尝试自动安装。
-
-Windows 命令先下载 `install.ps1` 再执行，而不是管道给 `Invoke-Expression`：脚本是带 BOM 的 UTF-8，Windows PowerShell 依赖 BOM 才能正确显示中文，而 `Invoke-Expression` 无法处理开头的 BOM。本地 checkout 路径可以包含空格；安装器通过 profile 内的目录联接注册桥插件，因此包规格中不会出现 Windows 绝对路径。
-
-如需从源码 checkout 安装当前分支：
-
+瀹夎鍣ㄤ細涓嬭浇鏈粨搴撶殑榛樿鍒嗘敮銆佹瀯寤哄苟娉ㄥ唽妗ユ彃浠躲€佹妸 Chrome 鎵╁睍鏋勫缓鍒?`~/.dsh/browser-extension`锛岀劧鍚庢墦寮€ `chrome://extensions`銆傞娆″畨瑁呮椂锛岃鎶婅鐩綍浣滀负宸茶В鍘嬫墿灞曞姞杞斤紱鏇存柊鏃剁偣鍑?*閲嶆柊鍔犺浇**銆傚鏋?dsh 宸插湪杩愯锛岃閲嶅惎銆?
+`scripts/install.sh` 瑕嗙洊 macOS 涓?Linux锛宍scripts/install.ps1` 瑕嗙洊 Windows锛涗袱鑰呭啓鍏ュ悓涓€涓墭绠″伐浣滃尯鍜屽悓涓€浠藉畨瑁呭厓鏁版嵁銆傚綋绯荤粺鎻愪緵鍓创鏉垮伐鍏凤紙`pbcopy`銆乣wl-copy`銆乣xclip`銆乣xsel` 鎴?PowerShell 鐨?`Set-Clipboard`锛夋椂锛屽畨瑁呭櫒浼氭妸鎵╁睍璺緞澶嶅埗鍒板壀璐存澘锛涙棤璁烘槸鍚﹀鍒舵垚鍔熼兘浼氭墦鍗拌璺緞銆傝嫢鏈娴嬪埌 Chrome/Chromium锛屽畨瑁呭櫒浼氭墦鍗板搴旂殑瀹夎鍛戒护锛涜缃?`DSH_INSTALL_BROWSER=1` 鍙瀹夎鍣ㄥ皾璇曡嚜鍔ㄥ畨瑁呫€?
+Windows 鍛戒护鍏堜笅杞?`install.ps1` 鍐嶆墽琛岋紝鑰屼笉鏄閬撶粰 `Invoke-Expression`锛氳剼鏈槸甯?BOM 鐨?UTF-8锛學indows PowerShell 渚濊禆 BOM 鎵嶈兘姝ｇ‘鏄剧ず涓枃锛岃€?`Invoke-Expression` 鏃犳硶澶勭悊寮€澶寸殑 BOM銆傛湰鍦?checkout 璺緞鍙互鍖呭惈绌烘牸锛涘畨瑁呭櫒閫氳繃 profile 鍐呯殑鐩綍鑱旀帴娉ㄥ唽妗ユ彃浠讹紝鍥犳鍖呰鏍间腑涓嶄細鍑虹幇 Windows 缁濆璺緞銆?
+濡傞渶浠庢簮鐮?checkout 瀹夎褰撳墠鍒嗘敮锛?
 ```sh
 git clone https://github.com/DightEndless/dsh-browser.git
 cd dsh-browser
 ./scripts/install.sh
 ```
 
-Windows 请在 checkout 中运行 `.\scripts\install.ps1`。拉取或切换版本后，请重新运行安装器并重新加载扩展。
+Windows 璇峰湪 checkout 涓繍琛?`.\scripts\install.ps1`銆傛媺鍙栨垨鍒囨崲鐗堟湰鍚庯紝璇烽噸鏂拌繍琛屽畨瑁呭櫒骞堕噸鏂板姞杞芥墿灞曘€?
+### Firefox 婧愮爜鏋勫缓
 
-### Firefox 源码构建
-
-Firefox 使用独立的 MV3 manifest、事件页后台和 Sidebar。在 checkout 中构建后，打开 `about:debugging#/runtime/this-firefox`，选择「临时载入附加组件」，再选取 `extensions/dsh-browser/dist-firefox/manifest.json`：
-
+Firefox 浣跨敤鐙珛鐨?MV3 manifest銆佷簨浠堕〉鍚庡彴鍜?Sidebar銆傚湪 checkout 涓瀯寤哄悗锛屾墦寮€ `about:debugging#/runtime/this-firefox`锛岄€夋嫨銆屼复鏃惰浇鍏ラ檮鍔犵粍浠躲€嶏紝鍐嶉€夊彇 `extensions/dsh-browser/dist-firefox/manifest.json`锛?
 ```sh
 pnpm install
 pnpm --filter dsh-browser-extension run build:firefox
 ```
 
-桥地址仍会自动探测。Firefox 的 `moz-extension://` UUID 不能证明扩展身份，因此需要把 `~/.dsh/ext-bridge-token` 中的 bearer token 填入扩展设置（dsh 启动日志会报告该文件路径）。签名发布时可直接使用同一份 `dist-firefox/` 产物。
-
-### 启动与使用
-
-启动托管安装：
-
+妗ュ湴鍧€浠嶄細鑷姩鎺㈡祴銆侳irefox 鐨?`moz-extension://` UUID 涓嶈兘璇佹槑鎵╁睍韬唤锛屽洜姝ら渶瑕佹妸 `~/.dsh/ext-bridge-token` 涓殑 bearer token 濉叆鎵╁睍璁剧疆锛坉sh 鍚姩鏃ュ織浼氭姤鍛婅鏂囦欢璺緞锛夈€傜鍚嶅彂甯冩椂鍙洿鎺ヤ娇鐢ㄥ悓涓€浠?`dist-firefox/` 浜х墿銆?
+### 鍚姩涓庝娇鐢?
+鍚姩鎵樼瀹夎锛?
 ```sh
 cd ~/.dsh/dsh-browser && pnpm start
 ```
 
-使用源码 checkout 时，请在仓库根目录运行 `pnpm start`。受支持的精确公开版本为：
+浣跨敤婧愮爜 checkout 鏃讹紝璇峰湪浠撳簱鏍圭洰褰曡繍琛?`pnpm start`銆傚彈鏀寔鐨勭簿纭叕寮€鐗堟湰涓猴細
 
 ```sh
 npx @deepseek-ai/dsh@0.2.0-rc.2 web
 ```
 
-Chrome 本机使用无需配置；Firefox 需要填写上述本地桥 token。打开页面，点击 DeepSeek 鲸鱼图标，等待侧边栏显示**已连接**。已有 HTTP(S) 标签页会在第一次操作时自动加载。在浏览器受保护页面和扩展商店中，模型可以读取标签页元数据，并通过浏览器级能力导航到 HTTP(S)、后退、前进和刷新，但不能读取或操作受保护页面的 DOM。
+Chrome 鏈満浣跨敤鏃犻渶閰嶇疆锛汧irefox 闇€瑕佸～鍐欎笂杩版湰鍦版ˉ token銆傛墦寮€椤甸潰锛岀偣鍑?DeepSeek 椴搁奔鍥炬爣锛岀瓑寰呬晶杈规爮鏄剧ず**宸茶繛鎺?*銆傚凡鏈?HTTP(S) 鏍囩椤典細鍦ㄧ涓€娆℃搷浣滄椂鑷姩鍔犺浇銆傚湪娴忚鍣ㄥ彈淇濇姢椤甸潰鍜屾墿灞曞晢搴椾腑锛屾ā鍨嬪彲浠ヨ鍙栨爣绛鹃〉鍏冩暟鎹紝骞堕€氳繃娴忚鍣ㄧ骇鑳藉姏瀵艰埅鍒?HTTP(S)銆佸悗閫€銆佸墠杩涘拰鍒锋柊锛屼絾涓嶈兘璇诲彇鎴栨搷浣滃彈淇濇姢椤甸潰鐨?DOM銆?
+## 鏁呴殰鎺掓煡
 
-## 故障排查
+**渚ц竟鏍忎竴鐩存樉绀恒€屾湭杩炴帴銆?*
 
-**侧边栏一直显示「未连接」**
-
-- 确认本机 dsh web 正在运行（默认 `http://127.0.0.1:3080`）。
-- 确认桥接已加载：浏览器打开 `http://127.0.0.1:3080/ext/bridge-config`，应返回类似 `{"wsUrl":"ws://127.0.0.1:3080/ext/bridge"}` 的 JSON。如果返回的是网页而不是 JSON，说明当前运行的 dsh 早于桥接注册——重启 dsh 并刷新页面即可，扩展会自动重连。
-- 扩展会自动探测 3080/3081/3090/14389 端口。若 dsh 运行在其它端口，或使用 `--host 0.0.0.0` 远程部署，请在面板设置中填写地址与桥接 token。Firefox 始终需要 token。
-
-## 开发
-
-桥接插件和 Chrome/Firefox 扩展都属于本仓库 workspace；所有命令均在本仓库根目录执行。首次开发安装运行 `pnpm install`。
-
+- 纭鏈満 dsh web 姝ｅ湪杩愯锛堥粯璁?`http://127.0.0.1:3080`锛夈€?- 纭妗ユ帴宸插姞杞斤細娴忚鍣ㄦ墦寮€ `http://127.0.0.1:3080/ext/bridge-config`锛屽簲杩斿洖绫讳技 `{"wsUrl":"ws://127.0.0.1:3080/ext/bridge"}` 鐨?JSON銆傚鏋滆繑鍥炵殑鏄綉椤佃€屼笉鏄?JSON锛岃鏄庡綋鍓嶈繍琛岀殑 dsh 鏃╀簬妗ユ帴娉ㄥ唽鈥斺€旈噸鍚?dsh 骞跺埛鏂伴〉闈㈠嵆鍙紝鎵╁睍浼氳嚜鍔ㄩ噸杩炪€?- 鎵╁睍浼氳嚜鍔ㄦ帰娴?3080/3081/3090/14389 绔彛銆傝嫢 dsh 杩愯鍦ㄥ叾瀹冪鍙ｏ紝鎴栦娇鐢?`--host 0.0.0.0` 杩滅▼閮ㄧ讲锛岃鍦ㄩ潰鏉胯缃腑濉啓鍦板潃涓庢ˉ鎺?token銆侳irefox 濮嬬粓闇€瑕?token銆?
+## 寮€鍙?
+妗ユ帴鎻掍欢鍜?Chrome/Firefox 鎵╁睍閮藉睘浜庢湰浠撳簱 workspace锛涙墍鏈夊懡浠ゅ潎鍦ㄦ湰浠撳簱鏍圭洰褰曟墽琛屻€傞娆″紑鍙戝畨瑁呰繍琛?`pnpm install`銆?
 ```sh
 pnpm run build
 pnpm run typecheck
@@ -205,24 +161,10 @@ pnpm --filter dsh-browser-extension run build:firefox
 pnpm --filter dsh-browser-extension run test
 ```
 
-注意：
+娉ㄦ剰锛?
+- 鍚姩鍓嶆ˉ鎺ユ彃浠跺繀椤诲凡鏈?`lib/` 渚?Loader 鍔犺浇锛沗scripts/install.sh` 鍜屾牴鐩綍 `pnpm run build` 閮戒細鍏堟瀯寤烘彃浠跺啀鏋勫缓鎵╁睍銆?- 妗ユ瀯寤轰娇鐢?Node.js `copyFileSync` 澶嶅埗娴忚鍣ㄥ鎴风锛屽洜姝ゅ悓涓€鏉″寘鑴氭湰涓嶄緷璧?Unix `cp` 鍛戒护銆?- `@deepseek-ai/dsh` 涓庢ˉ鎺ユ彃浠剁殑渚濊禆鍥哄畾鍦ㄥ悓涓€鏉＄粡杩囬獙璇佺殑鍏紑鍙戝竷绾夸笂锛涘崌绾ф椂蹇呴』鍚屾椂鏇存柊 manifest銆侀攣鏂囦欢骞堕噸璺戞牴鐩綍妫€鏌ャ€?
+`check:runtime` 妫€鏌ュ疄闄呰В鏋愮殑 DSH 渚濊禆鍜岄攣鏂囦欢锛沗test:smoke` 浣跨敤涓存椂 DSH home 鍚姩鐪熷疄 web 瀹夸富锛岄獙璇佹ˉ鎺ュ拰閲嶅惎鍚庣殑浼氳瘽璇诲彇锛屾棤闇€妯″瀷瀵嗛挜銆侰I 鍦ㄥ共鍑€瀹夎鍚庤繍琛岃繖浜涙鏌ャ€?
+濡傛灉閬囧埌 `cache.hydratePrepared is not a function`锛屾洿鏂颁粨搴撳悗閲嶆柊杩愯 `pnpm install --frozen-lockfile` 鍜?`pnpm run build`锛屽啀閲嶅惎 `pnpm start`銆傛棤闇€鍒犻櫎浼氳瘽鏁版嵁鎴栨竻绌哄叏灞€缂撳瓨銆?
+## 瀹夊叏
 
-- 启动前桥接插件必须已有 `lib/` 供 Loader 加载；`scripts/install.sh` 和根目录 `pnpm run build` 都会先构建插件再构建扩展。
-- 桥构建使用 Node.js `copyFileSync` 复制浏览器客户端，因此同一条包脚本不依赖 Unix `cp` 命令。
-- `@deepseek-ai/dsh` 与桥接插件的依赖固定在同一条经过验证的公开发布线上；升级时必须同时更新 manifest、锁文件并重跑根目录检查。
-
-`check:runtime` 检查实际解析的 DSH 依赖和锁文件；`test:smoke` 使用临时 DSH home 启动真实 web 宿主，验证桥接和重启后的会话读取，无需模型密钥。CI 在干净安装后运行这些检查。
-
-如果遇到 `cache.hydratePrepared is not a function`，更新仓库后重新运行 `pnpm install --frozen-lockfile` 和 `pnpm run build`，再重启 `pnpm start`。无需删除会话数据或清空全局缓存。
-
-## 安全
-
-- 桥路径在 `/api` 信任栅栏之外，自带 bearer token 认证。
-- Chrome 扩展的本地 Origin 保留零配置回环访问；Firefox Origin 是每次安装生成的 UUID，必须携带 bearer token。
-- 特权网关方法（`settings.*`/`credentials.*`/`host.open*`）对非回环来源一律拒绝。
-- 单活动连接；浏览器页面管线默认以结构化文本呈现，`browser_screenshot` 是唯一会返回图片的浏览器工具：截图落到本地文件，模型拿到的是该路径，而不是内联像素。用户主动添加的对话图片交给 dsh 持久附件服务，密码和卡号值永不回传。
-- 助手开始工作时会绑定当时的活动标签页（提交提示时绑定；直接调用浏览器工具时则在首次调用绑定）。用户手动切页后，后续浏览器操作会暂停，侧栏会询问让助手继续原页面还是跟随新页面；选择原页面后允许在后台继续，但扩展绝不静默改绑或切换用户正在看的页面。受控标签页关闭后也会暂停，直到用户显式选择当前页。
-- 只有在侧栏打开、且页面共享不是「关闭」时才会捕获划选内容，密码和卡号字段永不读取。内容在发送之前始终留在扩展内部；移除、页面跳转或标签页关闭都会丢弃它；发送时与页面快照一样包在不可信内容边界内，来源标题和 URL 同样由页面提供，因此也放在边界之内。
-- 网页文字会标记为不可信输入。默认「自动共享」只按需读取受控标签页且不额外弹窗；对隐私敏感时可选择「每次询问」，或用「关闭」完全阻断读取。在「每次询问」模式下，读取弹窗可以仅允许一次，也可以持久切回自动读取；之后仍可在设置中关闭。读取的页面文字会发送给当前选择的模型。
-- 点击、输入、按键、导航、历史跳转和刷新默认失败关闭，必须由用户批准。可以只在当前侧栏会话中信任单个 origin（最后一个侧栏关闭或 Service Worker 重启即清空）；永久信任需在设置中显式管理。显式跨域 `browser_navigate` 和未知目标的历史跳转始终重新询问。
-- **允许模型完全控制浏览器**是显式的全局选择，只有设置保存成功后才会生效。启用后，页面读取、页面操作和标签页列出/跟随/关闭都不会再请求确认。调用在收到时固定其访问模式，因此开启完全控制不会追溯提升已经开始的受限调用。关闭会立即生效：取消尚未下发操作的调用，等待已经下发到浏览器的操作完成，再保存限制设置。快速重新开启也会在旧权限撤销完成前保持受限，并发保存会按请求顺序落盘。无论是否启用，浏览器受保护页面的 DOM 内容都无法访问。
+- 妗ヨ矾寰勫湪 `/api` 淇′换鏍呮爮涔嬪锛岃嚜甯?bearer token 璁よ瘉銆?- Chrome 鎵╁睍鐨勬湰鍦?Origin 淇濈暀闆堕厤缃洖鐜闂紱Firefox Origin 鏄瘡娆″畨瑁呯敓鎴愮殑 UUID锛屽繀椤绘惡甯?bearer token銆?- 鐗规潈缃戝叧鏂规硶锛坄settings.*`/`credentials.*`/`host.open*`锛夊闈炲洖鐜潵婧愪竴寰嬫嫆缁濄€?- 鍗曟椿鍔ㄨ繛鎺ワ紱娴忚鍣ㄩ〉闈㈢绾块粯璁や互缁撴瀯鍖栨枃鏈憟鐜帮紝`browser_screenshot` 鏄敮涓€浼氳繑鍥炲浘鐗囩殑娴忚鍣ㄥ伐鍏凤細鎴浘钀藉埌鏈湴鏂囦欢锛屾ā鍨嬫嬁鍒扮殑鏄璺緞锛岃€屼笉鏄唴鑱斿儚绱犮€傜敤鎴蜂富鍔ㄦ坊鍔犵殑瀵硅瘽鍥剧墖浜ょ粰 dsh 鎸佷箙闄勪欢鏈嶅姟锛屽瘑鐮佸拰鍗″彿鍊兼案涓嶅洖浼犮€?- 鍔╂墜寮€濮嬪伐浣滄椂浼氱粦瀹氬綋鏃剁殑娲诲姩鏍囩椤碉紙鎻愪氦鎻愮ず鏃剁粦瀹氾紱鐩存帴璋冪敤娴忚鍣ㄥ伐鍏锋椂鍒欏湪棣栨璋冪敤缁戝畾锛夈€傜敤鎴锋墜鍔ㄥ垏椤靛悗锛屽悗缁祻瑙堝櫒鎿嶄綔浼氭殏鍋滐紝渚ф爮浼氳闂鍔╂墜缁х画鍘熼〉闈㈣繕鏄窡闅忔柊椤甸潰锛涢€夋嫨鍘熼〉闈㈠悗鍏佽鍦ㄥ悗鍙扮户缁紝浣嗘墿灞曠粷涓嶉潤榛樻敼缁戞垨鍒囨崲鐢ㄦ埛姝ｅ湪鐪嬬殑椤甸潰銆傚彈鎺ф爣绛鹃〉鍏抽棴鍚庝篃浼氭殏鍋滐紝鐩村埌鐢ㄦ埛鏄惧紡閫夋嫨褰撳墠椤点€?- 鍙湁鍦ㄤ晶鏍忔墦寮€銆佷笖椤甸潰鍏变韩涓嶆槸銆屽叧闂€嶆椂鎵嶄細鎹曡幏鍒掗€夊唴瀹癸紝瀵嗙爜鍜屽崱鍙峰瓧娈垫案涓嶈鍙栥€傚唴瀹瑰湪鍙戦€佷箣鍓嶅缁堢暀鍦ㄦ墿灞曞唴閮紱绉婚櫎銆侀〉闈㈣烦杞垨鏍囩椤靛叧闂兘浼氫涪寮冨畠锛涘彂閫佹椂涓庨〉闈㈠揩鐓т竴鏍峰寘鍦ㄤ笉鍙俊鍐呭杈圭晫鍐咃紝鏉ユ簮鏍囬鍜?URL 鍚屾牱鐢遍〉闈㈡彁渚涳紝鍥犳涔熸斁鍦ㄨ竟鐣屼箣鍐呫€?- 缃戦〉鏂囧瓧浼氭爣璁颁负涓嶅彲淇¤緭鍏ャ€傞粯璁ゃ€岃嚜鍔ㄥ叡浜€嶅彧鎸夐渶璇诲彇鍙楁帶鏍囩椤典笖涓嶉澶栧脊绐楋紱瀵归殣绉佹晱鎰熸椂鍙€夋嫨銆屾瘡娆¤闂€嶏紝鎴栫敤銆屽叧闂€嶅畬鍏ㄩ樆鏂鍙栥€傚湪銆屾瘡娆¤闂€嶆ā寮忎笅锛岃鍙栧脊绐楀彲浠ヤ粎鍏佽涓€娆★紝涔熷彲浠ユ寔涔呭垏鍥炶嚜鍔ㄨ鍙栵紱涔嬪悗浠嶅彲鍦ㄨ缃腑鍏抽棴銆傝鍙栫殑椤甸潰鏂囧瓧浼氬彂閫佺粰褰撳墠閫夋嫨鐨勬ā鍨嬨€?- 鐐瑰嚮銆佽緭鍏ャ€佹寜閿€佸鑸€佸巻鍙茶烦杞拰鍒锋柊榛樿澶辫触鍏抽棴锛屽繀椤荤敱鐢ㄦ埛鎵瑰噯銆傚彲浠ュ彧鍦ㄥ綋鍓嶄晶鏍忎細璇濅腑淇′换鍗曚釜 origin锛堟渶鍚庝竴涓晶鏍忓叧闂垨 Service Worker 閲嶅惎鍗虫竻绌猴級锛涙案涔呬俊浠婚渶鍦ㄨ缃腑鏄惧紡绠＄悊銆傛樉寮忚法鍩?`browser_navigate` 鍜屾湭鐭ョ洰鏍囩殑鍘嗗彶璺宠浆濮嬬粓閲嶆柊璇㈤棶銆?- **鍏佽妯″瀷瀹屽叏鎺у埗娴忚鍣?*鏄樉寮忕殑鍏ㄥ眬閫夋嫨锛屽彧鏈夎缃繚瀛樻垚鍔熷悗鎵嶄細鐢熸晥銆傚惎鐢ㄥ悗锛岄〉闈㈣鍙栥€侀〉闈㈡搷浣滃拰鏍囩椤靛垪鍑?璺熼殢/鍏抽棴閮戒笉浼氬啀璇锋眰纭銆傝皟鐢ㄥ湪鏀跺埌鏃跺浐瀹氬叾璁块棶妯″紡锛屽洜姝ゅ紑鍚畬鍏ㄦ帶鍒朵笉浼氳拷婧彁鍗囧凡缁忓紑濮嬬殑鍙楅檺璋冪敤銆傚叧闂細绔嬪嵆鐢熸晥锛氬彇娑堝皻鏈笅鍙戞搷浣滅殑璋冪敤锛岀瓑寰呭凡缁忎笅鍙戝埌娴忚鍣ㄧ殑鎿嶄綔瀹屾垚锛屽啀淇濆瓨闄愬埗璁剧疆銆傚揩閫熼噸鏂板紑鍚篃浼氬湪鏃ф潈闄愭挙閿€瀹屾垚鍓嶄繚鎸佸彈闄愶紝骞跺彂淇濆瓨浼氭寜璇锋眰椤哄簭钀界洏銆傛棤璁烘槸鍚﹀惎鐢紝娴忚鍣ㄥ彈淇濇姢椤甸潰鐨?DOM 鍐呭閮芥棤娉曡闂€?
