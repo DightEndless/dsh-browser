@@ -44,6 +44,8 @@ function mockChrome(options: {
   debuggerAttachError?: Error
   /** Centre of the element an indexed point tool resolves, in viewport pixels. */
   elementCenter?: { x: number; y: number }
+  /** Sequential centres returned by executeScript (e.g. for remeasuring after scroll). */
+  elementCenters?: Array<{ x: number; y: number }>
   /** Set to true so an indexed lookup reports that the element is gone. */
   elementMissing?: boolean
   /** What `Page.getLayoutMetrics` answers with. */
@@ -54,6 +56,7 @@ function mockChrome(options: {
   captureVisibleTabResult?: unknown
 }) {
   const responses = [...(options.responses ?? [OK])]
+  const centers = options.elementCenters !== undefined ? [...options.elementCenters] : undefined
   const runtimeListeners = new Set<(message: unknown, sender: chrome.runtime.MessageSender) => void>()
   const currentFrames = () => options.frames ?? (options.tab?.id === undefined ? [] : [{
     frameId: 0,
@@ -80,7 +83,7 @@ function mockChrome(options: {
       const wanted = injection?.args?.[0]
       if (typeof wanted !== 'number') return [{ frameId: 0, result: { width: 800, height: 600 } }]
       if (options.elementMissing === true) return [{ frameId: 0, result: { width: 800, height: 600, missing: true } }]
-      const centre = options.elementCenter ?? { x: 400, y: 300 }
+      const centre = centers?.shift() ?? options.elementCenter ?? { x: 400, y: 300 }
       return [{ frameId: 0, result: { width: 800, height: 600, centerX: centre.x, centerY: centre.y } }]
     })
     : vi.fn(async () => { throw options.injectionError })
@@ -303,6 +306,42 @@ describe('dispatchToolCall', () => {
     }
     expect(commitAction).toHaveBeenCalledTimes(4)
     expect(chromeMock.sendMessage).not.toHaveBeenCalled()
+  })
+
+  it('falls back to browser-level reload when content script times out on browser_reload', async () => {
+    vi.useFakeTimers()
+    try {
+      const commitAction = vi.fn()
+      const chromeMock = mockChrome({
+        tab: { id: 8, url: 'https://example.com/stuck' },
+        respond: () => new Promise(() => {}),
+      })
+
+      const callPromise = dispatchToolCall(
+        { id: 'reload-timeout', name: 'browser_reload', args: {}, expiresAt: Date.now() + 60_000 },
+        'auto',
+        undefined,
+        async () => 'approved',
+        undefined,
+        undefined,
+        undefined,
+        { unrestrictedAccess: false, commitAction },
+      )
+
+      await vi.advanceTimersByTimeAsync(46_000)
+
+      const result = await callPromise
+      expect(result).toMatchObject({
+        ok: true,
+        result: {
+          text: expect.stringContaining('reloaded the tab using browser-level controls instead'),
+          navigationPending: true,
+        },
+      })
+      expect(chromeMock.reload).toHaveBeenCalledWith(8)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('rejects DOM actions on protected pages before requesting approval', async () => {
@@ -531,6 +570,11 @@ describe('dispatchToolCall', () => {
     expect(chromeMock.debuggerSendCommand).toHaveBeenCalledWith(
       { tabId: 7 },
       'Input.dispatchMouseEvent',
+      expect.objectContaining({ type: 'mouseMoved', x: 400, y: 150, button: 'none', buttons: 0 }),
+    )
+    expect(chromeMock.debuggerSendCommand).toHaveBeenCalledWith(
+      { tabId: 7 },
+      'Input.dispatchMouseEvent',
       expect.objectContaining({ type: 'mousePressed', x: 400, y: 150 }),
     )
     expect(chromeMock.debuggerDetach).toHaveBeenCalledTimes(1)
@@ -547,6 +591,63 @@ describe('dispatchToolCall', () => {
     )
 
     expect(answer).toMatchObject({ ok: false, error: { message: expect.stringContaining('between 0 and 1') } })
+    expect(chromeMock.debuggerAttach).not.toHaveBeenCalled()
+  })
+
+  it('scrolls an indexed element into view and clicks it when initially outside viewport', async () => {
+    const chromeMock = mockChrome({
+      tab: { id: 7, url: 'https://example.com' },
+      elementCenters: [
+        { x: 400, y: 950 },
+        { x: 400, y: 300 },
+      ],
+    })
+
+    const answer = await dispatchToolCall(
+      { ...CALL, name: 'browser_click_at', args: { index: 4 } },
+      'auto',
+      undefined,
+      async () => 'approved' as const,
+    )
+
+    expect(answer).toMatchObject({
+      ok: true,
+      result: {
+        text: expect.stringContaining('(scrolled into view before clicking)'),
+      },
+    })
+    expect(chromeMock.debuggerSendCommand).toHaveBeenCalledWith(
+      { tabId: 7 },
+      'Input.dispatchMouseEvent',
+      expect.objectContaining({ type: 'mouseMoved', x: 400, y: 300 }),
+    )
+    expect(chromeMock.debuggerSendCommand).toHaveBeenCalledWith(
+      { tabId: 7 },
+      'Input.dispatchMouseEvent',
+      expect.objectContaining({ type: 'mousePressed', x: 400, y: 300 }),
+    )
+  })
+
+  it('rejects an indexed element when it remains outside the viewport after scrolling', async () => {
+    const chromeMock = mockChrome({
+      tab: { id: 7, url: 'https://example.com' },
+      elementCenters: [
+        { x: 400, y: 950 },
+        { x: 400, y: 950 },
+      ],
+    })
+
+    const answer = await dispatchToolCall(
+      { ...CALL, name: 'browser_click_at', args: { index: 4 } },
+      'auto',
+      undefined,
+      async () => 'approved' as const,
+    )
+
+    expect(answer).toMatchObject({
+      ok: false,
+      error: { message: expect.stringContaining('sits at (400, 950), outside the 800×600 viewport') },
+    })
     expect(chromeMock.debuggerAttach).not.toHaveBeenCalled()
   })
 

@@ -709,6 +709,8 @@ interface ViewportPoint {
   height: number
   /** How the caller addressed the point, for the result message. */
   label: string
+  /** Whether the element was outside viewport and scrolled into view before clicking. */
+  scrolledIntoView?: boolean
 }
 
 /**
@@ -792,6 +794,51 @@ async function resolvePoint(
   const px = Math.round(centerX)
   const py = Math.round(centerY)
   if (px < 0 || py < 0 || px > width || py > height) {
+    let scrolledMeasured: { width?: number; height?: number; centerX?: number; centerY?: number; missing?: boolean } | undefined
+    try {
+      const [scrolled] = await chrome.scripting.executeScript({
+        target: { tabId },
+        func: (wanted: number, registryKey: string) => {
+          const registry = (globalThis as Record<string, unknown>)[registryKey] as
+            { elementByIndex?: (index: number) => Element | undefined } | undefined
+          const element = registry !== undefined
+            ? registry.elementByIndex?.(wanted)
+            : document.querySelector(`[data-dsh-el="${wanted}"]`)
+          if (element === null || element === undefined) return { missing: true }
+          element.scrollIntoView({ block: 'center', inline: 'center', behavior: 'instant' })
+          const rect = element.getBoundingClientRect()
+          return {
+            width: window.innerWidth,
+            height: window.innerHeight,
+            centerX: rect.left + rect.width / 2,
+            centerY: rect.top + rect.height / 2,
+          }
+        },
+        args: [index, ELEMENT_IDS_GLOBAL],
+      })
+      scrolledMeasured = scrolled?.result as typeof scrolledMeasured
+    } catch {
+      scrolledMeasured = undefined
+    }
+    await sleep(50)
+    const scrolledWidth = scrolledMeasured?.width ?? width
+    const scrolledHeight = scrolledMeasured?.height ?? height
+    const scrolledCenterX = scrolledMeasured?.centerX
+    const scrolledCenterY = scrolledMeasured?.centerY
+    if (typeof scrolledCenterX === 'number' && typeof scrolledCenterY === 'number') {
+      const scrolledPx = Math.round(scrolledCenterX)
+      const scrolledPy = Math.round(scrolledCenterY)
+      if (scrolledPx >= 0 && scrolledPy >= 0 && scrolledPx <= scrolledWidth && scrolledPy <= scrolledHeight) {
+        return {
+          x: scrolledPx,
+          y: scrolledPy,
+          width: scrolledWidth,
+          height: scrolledHeight,
+          label: `the centre of element [${index}] (${scrolledPx}, ${scrolledPy})`,
+          scrolledIntoView: true,
+        }
+      }
+    }
     return unavailable(`Element [${index}] sits at (${px}, ${py}), outside the ${width}×${height} viewport. Scroll it into view with browser_scroll, then retry.`)
   }
   return { x: px, y: py, width, height, label: `the centre of element [${index}] (${px}, ${py})` }
@@ -828,13 +875,16 @@ async function dispatchClickAt(tabId: number, call: ToolCall, signal?: AbortSign
   if (isToolAnswer(point)) return point
   if (isCancelled(call, signal)) return cancelled()
   return await runWithDebugger(tabId, async (target) => {
+    const move = await sendMouse(target, { type: 'mouseMoved', x: point.x, y: point.y, button: 'none', buttons: 0 })
+    if (move !== undefined) return unavailable(`The click could not be delivered: ${move}`)
     const press = await sendMouse(target, { type: 'mousePressed', x: point.x, y: point.y, button: 'left', buttons: 1, clickCount: 1 })
     if (press !== undefined) return unavailable(`The click could not be delivered: ${press}`)
     const release = await sendMouse(target, { type: 'mouseReleased', x: point.x, y: point.y, button: 'left', buttons: 0, clickCount: 1 })
     if (release !== undefined) return unavailable(`The click could not be delivered: ${release}`)
+    const scrolledNote = point.scrolledIntoView ? ' (scrolled into view before clicking)' : ''
     return {
       ok: true,
-      result: { text: `Clicked ${point.label} of ${point.width}×${point.height}.` },
+      result: { text: `Clicked ${point.label} of ${point.width}×${point.height}${scrolledNote}.` },
     }
   })
 }
@@ -1687,6 +1737,31 @@ async function dispatchToolCallUnlocked(
   } catch (error: unknown) {
     if (isCancelled(call, signal)) return cancelled()
     if (error instanceof ContentScriptTimeoutError) {
+      if (call.name === 'browser_reload') {
+        const fallback = await dispatchTabNativeTool(
+          tab.id,
+          tab.url,
+          tab.title,
+          tab.windowId,
+          call,
+          effectiveBudget,
+          signal,
+          targetStillAllowed,
+          tabManagement.commitAction,
+        )
+        if (fallback !== undefined && fallback.ok) {
+          const nativeResult = typeof fallback.result === 'object' && fallback.result !== null ? fallback.result : {}
+          resetTabSnapshot(tab.id)
+          return {
+            ok: true,
+            result: {
+              ...nativeResult,
+              text: 'The content script did not answer; reloaded the tab using browser-level controls instead. Call browser_snapshot again after it loads.',
+            },
+          }
+        }
+        if (fallback !== undefined) return fallback
+      }
       return unavailable(`The page did not answer within ${error.waitedMs}ms, which usually means the tab was frozen or the page's own script is stuck. Reload the tab with browser_reload, then take a fresh snapshot.`)
     }
     if (!contentScriptReceiverMissing(error)) {
