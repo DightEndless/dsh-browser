@@ -13,6 +13,10 @@
 
 <img width="1672" alt="A page being read with the side panel connected beside it" src="packages/browser/bridge-browser/assets/screenshots/browser-and-panel.png" />
 
+<p align="center">
+  <img width="100%" alt="dsh-browser architecture: pure-text model controlling active browser tabs through extension" src="packages/browser/bridge-browser/assets/diagrams/architecture.svg" />
+</p>
+
 Connect [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) to the Chrome or Firefox tabs you are already using. The model can read page content, operate controls, navigate, and manage tabs while preserving your login state, session, and cookies. A side panel or sidebar provides the conversation UI.
 
 `dsh` is DeepSeek AI's open-source, plugin-based agent harness. This repository provides a companion browser bridge plugin and Chrome/Firefox MV3 extension as one standalone pnpm workspace.
@@ -69,7 +73,16 @@ Installing the plugin from repository source also works — `dsh plugin --profil
 > [!IMPORTANT]
 > The unscoped [`dsh-browser`](https://www.npmjs.com/package/dsh-browser) package on npm belongs to a different project and is not affiliated with this repository. This fork is not published on npm either: the prebuilt release assets above are the install, and the installer is the one-command alternative.
 
+## How this differs from Playwright-based approaches
+
+Most browser-automation agent stacks rely on headless Playwright or Puppeteer. While effective for automated testing, running an interactive personal agent with that architecture creates distinct trade-offs:
+
+1. **Active Tab vs. Cold Browser**: Playwright launches an isolated, blank browser instance with an empty cache. `dsh-browser` attaches directly to the Chrome or Edge tab you are already browsing in, so existing logins, cookies, session credentials, and user profiles remain instantly available without manual re-authentication or credentials sharing.
+2. **Zero Extra Processes or Debugging Ports**: Instead of spawning background browser processes with an open `--remote-debugging-port` (which exposes an unauthenticated control surface), `dsh-browser` operates via an unpacked MV3 extension communicating with the host over a local, bearer-token-authenticated loopback WebSocket.
+3. **Approval-Gated, Trusted Input**: While Playwright runs scripted events in an unattended loop, `dsh-browser` gates state-changing actions behind explicit user approval in the side panel. Inputs dispatch genuine CDP events (`isTrusted: true`) that modern web applications accept, while sensitive form values are masked in snapshots.
+
 ## Performance
+
 
 In a paired 60-run end-to-end benchmark on August 18, 2026, measured on the upstream project whose page-tool surface this fork shares, both backends completed all 30 assigned runs successfully, while dsh Browser Control required fewer model/tool round trips and finished faster:
 

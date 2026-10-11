@@ -8,7 +8,20 @@ The **browser-operation bridge** for dsh: mounts a token-authenticated WebSocket
 
 **Text-first browser tools, multimodal chat passthrough**: page snapshots stay structured text (title, main content, numbered interactive inventory, and masked form fields), and every browser action uses stable inventory numbers. `browser_screenshot` is the one exception, and it keeps the tool surface text-shaped: the capture is written to a local file and the tool returns that path, so no pixels travel in the tool result. The generic RPC carrier also passes dsh 0.2.0 image prompts and durable attachment reads; deferred new sessions expose image limits only when the host actually mounts the attachment service.
 
+<p align="center">
+  <img width="100%" alt="dsh-browser architecture diagram: pure-text model controlling active browser tabs through extension" src="assets/diagrams/architecture.svg" />
+</p>
+
+## How this differs from Playwright-based approaches
+
+Most browser-automation agent stacks rely on headless Playwright or Puppeteer. While effective for automated testing, running an interactive personal agent with that architecture creates distinct trade-offs:
+
+1. **Active Tab vs. Cold Browser**: Playwright launches an isolated, blank browser instance with an empty cache. `dsh-browser` attaches directly to the Chrome or Edge tab you are already browsing in, so existing logins, cookies, session credentials, and user profiles remain instantly available without manual re-authentication or credentials sharing.
+2. **Zero Extra Processes or Debugging Ports**: Instead of spawning background browser processes with an open `--remote-debugging-port` (which exposes an unauthenticated control surface), `dsh-browser` operates via an unpacked MV3 extension communicating with the host over a local, bearer-token-authenticated loopback WebSocket.
+3. **Approval-Gated, Trusted Input**: While Playwright runs scripted events in an unattended loop, `dsh-browser` gates state-changing actions behind explicit user approval in the side panel. Inputs dispatch genuine CDP events (`isTrusted: true`) that modern web applications accept, while sensitive form values are masked in snapshots.
+
 ## Config
+
 
 | Key | Type | Default | Description |
 |---|---|---|---|

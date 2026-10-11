@@ -13,6 +13,10 @@
 
 <img width="1672" alt="侧边栏已连接，正在读取一个页面" src="packages/browser/bridge-browser/assets/screenshots/browser-and-panel.png" />
 
+<p align="center">
+  <img width="100%" alt="dsh-browser 架构图：纯文本大模型如何通过扩展接管正在使用的浏览器标签页" src="packages/browser/bridge-browser/assets/diagrams/architecture.svg" />
+</p>
+
 把 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 连接到你正在使用的 Chrome 或 Firefox 标签页。模型可以读取页面内容、操作控件、导航和管理标签页，同时保留登录态、会话和 Cookie。侧边栏提供对话界面。
 
 `dsh` 是由 DeepSeek AI 开发的开源、插件化 agent harness（智能体框架）。本仓库将配套的浏览器桥插件与 Chrome/Firefox MV3 扩展组成一个独立的 pnpm workspace。
@@ -70,7 +74,16 @@ $s="$env:TEMP\dsh-install.ps1"; irm https://raw.githubusercontent.com/DightEndle
 > [!IMPORTANT]
 > npm 上未加 scope 的 [`dsh-browser`](https://www.npmjs.com/package/dsh-browser) 包属于另一个项目，与本仓库无关。本 fork 同样没有发布 npm 包：上方的预构建资产就是安装方式，安装器则是"一条命令装齐"的替代方案。
 
+## 与 Playwright 方案的核心区别
+
+常见的浏览器 Agent 方案多基于无头 Playwright 或 Puppeteer。这类方案适合自动化测试与爬虫，但在作为日常伴随式个人助手时，与 `dsh-browser` 存在显著区别：
+
+1. **接管正在使用的标签页 vs. 空白新浏览器**：Playwright 每次启动全新的干净浏览器实例，没有用户的日常登录状态与 Cookie；而 `dsh-browser` 直接接入你在 Chrome 或 Edge 中此刻正在浏览的标签页，完整保留现有登录凭据、会话与个性化配置，无需重复登录或传递账号密码。
+2. **零额外浏览器进程与调试端口**：无需在后台拉起第二个浏览器，也不对外开放 `--remote-debugging-port` 远程调试端口（该端口在本地网络上存在无凭据控制风险）。扩展与宿主桥接通过本地回环 WebSocket 进行，受独立的 bearer token 保护。
+3. **受信任输入与逐项人工审批**：与 Playwright 预设的全自动无人值守脚本不同，`dsh-browser` 专为人类协同设计。状态变更类操作在执行前会在侧边栏弹出原生审批卡片，经用户许可后方走 CDP 派发具有 `isTrusted: true` 标记的真实硬件级输入；表单敏感信息在快照中自动脱敏呈现。
+
 ## 性能基准
+
 
 在 2026 年 8 月 18 日完成的 60 次配对端到端评测中（该评测在上游项目上测得，本 fork 与之共用同一套页面工具面），两个后端分配到的 30 次运行均全部成功；dsh 浏览器操作使用了更少的模型/工具轮次，并以更短时间完成任务：
 

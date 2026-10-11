@@ -1,0 +1,309 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" width="100%" height="100%">
+  <defs>
+    <!-- Background Gradients -->
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0b1120" />
+      <stop offset="50%" stop-color="#0f172a" />
+      <stop offset="100%" stop-color="#090d16" />
+    </linearGradient>
+
+    <!-- Card Gradients -->
+    <linearGradient id="cardGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#1e293b" />
+      <stop offset="100%" stop-color="#0f172a" />
+    </linearGradient>
+
+    <linearGradient id="cardGradHighlight" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#1e3a8a" stop-opacity="0.3" />
+      <stop offset="100%" stop-color="#0f172a" />
+    </linearGradient>
+
+    <!-- Drop Shadows -->
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="6" stdDeviation="10" flood-color="#000000" flood-opacity="0.5" />
+    </filter>
+
+    <!-- Arrow Markers -->
+    <marker id="arrowBlue" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1 L 10 5 L 0 9 z" fill="#38bdf8" />
+    </marker>
+
+    <marker id="arrowEmerald" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1 L 10 5 L 0 9 z" fill="#34d399" />
+    </marker>
+
+    <marker id="arrowAmber" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1 L 10 5 L 0 9 z" fill="#fbbf24" />
+    </marker>
+  </defs>
+
+  <!-- Canvas Background -->
+  <rect width="1280" height="720" fill="url(#bgGrad)" />
+
+  <!-- Subtle grid lines -->
+  <g stroke="#334155" stroke-opacity="0.12" stroke-width="1">
+    <line x1="0" y1="90" x2="1280" y2="90" />
+    <line x1="0" y1="300" x2="1280" y2="300" />
+    <line x1="0" y1="490" x2="1280" y2="490" />
+    <line x1="333" y1="0" x2="333" y2="720" />
+    <line x1="639" y1="0" x2="639" y2="720" />
+    <line x1="945" y1="0" x2="945" y2="720" />
+  </g>
+
+  <!-- ========================================================================= -->
+  <!-- HEADER                                                                    -->
+  <!-- ========================================================================= -->
+  <g transform="translate(50, 42)">
+    <text x="0" y="20" font-family="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="24" font-weight="700" fill="#f8fafc">
+      dsh-browser 架构链路：纯文本模型如何原生操控你的浏览器
+    </text>
+    <text x="0" y="44" font-family="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="13" font-weight="400" fill="#94a3b8">
+      接管正在使用的标签页 · 保留已有登录态与 Cookie · 零额外浏览器与调试端口 · 动作人工审批 · 纯文本编号快照回传
+    </text>
+  </g>
+
+  <!-- ========================================================================= -->
+  <!-- 4 PRIMARY ARCHITECTURE NODES (TOP HALF)                                  -->
+  <!-- ========================================================================= -->
+
+  <!-- Node 1: DSH Model (x: 50, w: 260, h: 180) -->
+  <g transform="translate(50, 105)" filter="url(#shadow)">
+    <rect width="260" height="180" rx="12" fill="url(#cardGrad)" stroke="#38bdf8" stroke-width="1.5" />
+    <rect width="260" height="38" rx="12" fill="#0284c7" fill-opacity="0.2" />
+    <circle cx="24" cy="19" r="6" fill="#38bdf8" />
+    <text x="38" y="24" font-family="system-ui, sans-serif" font-size="13" font-weight="700" fill="#f8fafc">DSH Agent / 模型</text>
+
+    <g transform="translate(14, 50)">
+      <rect width="232" height="36" rx="6" fill="#1e293b" stroke="#334155" />
+      <text x="10" y="16" font-family="system-ui, sans-serif" font-size="11" font-weight="600" fill="#e2e8f0">纯文本上下文 (Text-First)</text>
+      <text x="10" y="29" font-family="system-ui, sans-serif" font-size="10" fill="#94a3b8">直接阅读编号元素 [1]..[60] 清单</text>
+    </g>
+
+    <g transform="translate(14, 92)">
+      <rect width="232" height="36" rx="6" fill="#1e293b" stroke="#334155" />
+      <text x="10" y="16" font-family="system-ui, sans-serif" font-size="11" font-weight="600" fill="#e2e8f0">标准工具调用 (Tool Call)</text>
+      <text x="10" y="29" font-family="system-ui, sans-serif" font-size="10" fill="#94a3b8">按编号派发 browser_click/type</text>
+    </g>
+
+    <g transform="translate(14, 134)">
+      <rect width="232" height="36" rx="6" fill="#0f172a" stroke="#0284c7" stroke-dasharray="2 2" />
+      <text x="10" y="16" font-family="system-ui, sans-serif" font-size="11" font-weight="600" fill="#38bdf8">按需本地截屏</text>
+      <text x="10" y="29" font-family="system-ui, sans-serif" font-size="10" fill="#94a3b8">仅在需要视觉时调用 browser_screenshot</text>
+    </g>
+  </g>
+
+  <!-- Arrow 1 -> 2 (x: 310 to 356, y: 195) -->
+  <path d="M 310 195 L 356 195" fill="none" stroke="#38bdf8" stroke-width="2.5" marker-end="url(#arrowBlue)" />
+  <text x="333" y="185" text-anchor="middle" font-family="system-ui, sans-serif" font-size="10" font-weight="600" fill="#38bdf8">tool.call</text>
+
+  <!-- Node 2: Bridge Plugin (x: 356, w: 260, h: 180) -->
+  <g transform="translate(356, 105)" filter="url(#shadow)">
+    <rect width="260" height="180" rx="12" fill="url(#cardGrad)" stroke="#818cf8" stroke-width="1.5" />
+    <rect width="260" height="38" rx="12" fill="#4f46e5" fill-opacity="0.2" />
+    <circle cx="24" cy="19" r="6" fill="#818cf8" />
+    <text x="38" y="24" font-family="system-ui, sans-serif" font-size="13" font-weight="700" fill="#f8fafc">桥接插件 (Bridge Plugin)</text>
+
+    <g transform="translate(14, 50)">
+      <rect width="232" height="36" rx="6" fill="#1e293b" stroke="#334155" />
+      <text x="10" y="16" font-family="system-ui, sans-serif" font-size="11" font-weight="600" fill="#e2e8f0">本地 WebSocket /ext/bridge</text>
+      <text x="10" y="29" font-family="system-ui, sans-serif" font-size="10" fill="#94a3b8">回环监听 127.0.0.1，零云端中转</text>
+    </g>
+
+    <g transform="translate(14, 92)">
+      <rect width="232" height="36" rx="6" fill="#1e293b" stroke="#334155" />
+      <text x="10" y="16" font-family="system-ui, sans-serif" font-size="11" font-weight="600" fill="#e2e8f0">Bearer Token 鉴权</text>
+      <text x="10" y="29" font-family="system-ui, sans-serif" font-size="10" fill="#94a3b8">~/.dsh/ext-bridge-token (0600 安全令牌)</text>
+    </g>
+
+    <g transform="translate(14, 134)">
+      <rect width="232" height="36" rx="6" fill="#0f172a" stroke="#6366f1" stroke-dasharray="2 2" />
+      <text x="10" y="16" font-family="system-ui, sans-serif" font-size="11" font-weight="600" fill="#a5b4fc">原生弹窗哨兵 (Dialog Sentinel)</text>
+      <text x="10" y="29" font-family="system-ui, sans-serif" font-size="10" fill="#94a3b8">&lt;5ms 极速警告 confirm/alert，不冻死</text>
+    </g>
+  </g>
+
+  <!-- Arrow 2 -> 3 (x: 616 to 662, y: 195) -->
+  <path d="M 616 195 L 662 195" fill="none" stroke="#38bdf8" stroke-width="2.5" marker-end="url(#arrowBlue)" />
+  <text x="639" y="185" text-anchor="middle" font-family="system-ui, sans-serif" font-size="10" font-weight="600" fill="#38bdf8">WS 帧</text>
+
+  <!-- Node 3: Browser Extension (x: 662, w: 260, h: 180) -->
+  <g transform="translate(662, 105)" filter="url(#shadow)">
+    <rect width="260" height="180" rx="12" fill="url(#cardGrad)" stroke="#f59e0b" stroke-width="1.5" />
+    <rect width="260" height="38" rx="12" fill="#d97706" fill-opacity="0.2" />
+    <circle cx="24" cy="19" r="6" fill="#fbbf24" />
+    <text x="38" y="24" font-family="system-ui, sans-serif" font-size="13" font-weight="700" fill="#f8fafc">浏览器扩展 (MV3 Extension)</text>
+
+    <g transform="translate(14, 50)">
+      <rect width="232" height="36" rx="6" fill="#2d2006" stroke="#f59e0b" />
+      <text x="10" y="16" font-family="system-ui, sans-serif" font-size="11" font-weight="700" fill="#fef3c7">侧边栏对话与审批卡片</text>
+      <text x="10" y="29" font-family="system-ui, sans-serif" font-size="10" fill="#fde68a">原生安全弹窗拦截，敏感参数打码</text>
+    </g>
+
+    <g transform="translate(14, 92)">
+      <rect width="232" height="36" rx="6" fill="#1e293b" stroke="#334155" />
+      <text x="10" y="16" font-family="system-ui, sans-serif" font-size="11" font-weight="600" fill="#e2e8f0">CDP 受信任输入 (isTrusted: true)</text>
+      <text x="10" y="29" font-family="system-ui, sans-serif" font-size="10" fill="#94a3b8">真实硬件级坐标点击、键盘输入、拖拽</text>
+    </g>
+
+    <g transform="translate(14, 134)">
+      <rect width="232" height="36" rx="6" fill="#1e293b" stroke="#334155" />
+      <text x="10" y="16" font-family="system-ui, sans-serif" font-size="11" font-weight="600" fill="#e2e8f0">内容解析与标签绑定</text>
+      <text x="10" y="29" font-family="system-ui, sans-serif" font-size="10" fill="#94a3b8">隔离环境抽取 DOM 并赋予元素编号</text>
+    </g>
+  </g>
+
+  <!-- Arrow 3 -> 4 (x: 922 to 968, y: 195) -->
+  <path d="M 922 195 L 968 195" fill="none" stroke="#38bdf8" stroke-width="2.5" marker-end="url(#arrowBlue)" />
+  <text x="945" y="185" text-anchor="middle" font-family="system-ui, sans-serif" font-size="10" font-weight="600" fill="#38bdf8">CDP 派发</text>
+
+  <!-- Node 4: Your Live Tab (x: 968, w: 262, h: 180) -->
+  <g transform="translate(968, 105)" filter="url(#shadow)">
+    <rect width="262" height="180" rx="12" fill="url(#cardGrad)" stroke="#10b981" stroke-width="1.5" />
+    <rect width="262" height="38" rx="12" fill="#059669" fill-opacity="0.2" />
+    <circle cx="24" cy="19" r="6" fill="#34d399" />
+    <text x="38" y="24" font-family="system-ui, sans-serif" font-size="13" font-weight="700" fill="#f8fafc">你正在用的那个标签页 (Live Tab)</text>
+
+    <g transform="translate(14, 50)">
+      <rect width="234" height="36" rx="6" fill="#062e20" stroke="#10b981" />
+      <text x="10" y="16" font-family="system-ui, sans-serif" font-size="11" font-weight="700" fill="#d1fae5">原生登录态与 Cookies 完整保留</text>
+      <text x="10" y="29" font-family="system-ui, sans-serif" font-size="10" fill="#a7f3d0">直接使用你当前账号，无需重新登录</text>
+    </g>
+
+    <g transform="translate(14, 92)">
+      <rect width="234" height="36" rx="6" fill="#1e293b" stroke="#334155" />
+      <text x="10" y="16" font-family="system-ui, sans-serif" font-size="11" font-weight="600" fill="#e2e8f0">零额外浏览器 · 零调试端口</text>
+      <text x="10" y="29" font-family="system-ui, sans-serif" font-size="10" fill="#94a3b8">不开第二个进程，不暴露 remote 端口</text>
+    </g>
+
+    <g transform="translate(14, 134)">
+      <rect width="234" height="36" rx="6" fill="#1e293b" stroke="#334155" />
+      <text x="10" y="16" font-family="system-ui, sans-serif" font-size="11" font-weight="600" fill="#e2e8f0">活跃交互元素 [1]..[60]</text>
+      <text x="10" y="29" font-family="system-ui, sans-serif" font-size="10" fill="#94a3b8">表单、按钮、输入框稳定编号寻址</text>
+    </g>
+  </g>
+
+  <!-- ========================================================================= -->
+  <!-- MIDDLE FLOW LINK: APPROVAL GATE & RETURN SNAPSHOT PATH                    -->
+  <!-- ========================================================================= -->
+
+  <!-- Upward Gate: Action Requires Human Approval (x: 662 to 922, y: 305) -->
+  <g transform="translate(662, 305)">
+    <rect width="260" height="38" rx="8" fill="#78350f" fill-opacity="0.9" stroke="#f59e0b" stroke-width="1.4" />
+    <circle cx="20" cy="19" r="6" fill="#fbbf24" />
+    <text x="34" y="23" font-family="system-ui, sans-serif" font-size="12" font-weight="700" fill="#fef3c7">
+      ↑ 动作需要你审批 (Human Approval)
+    </text>
+  </g>
+  <text x="792" y="358" text-anchor="middle" font-family="system-ui, sans-serif" font-size="11" fill="#fde68a">
+    敏感状态变更需在侧栏确认后才派发真实 CDP
+  </text>
+
+  <!-- Downward Return Pathway: Tab -> Extension -> Bridge -> Model (Snapshots) -->
+  <g transform="translate(50, 385)">
+    <rect width="1180" height="88" rx="10" fill="#0f291e" fill-opacity="0.6" stroke="#10b981" stroke-width="1.2" />
+
+    <!-- Return Flow Arrow Line -->
+    <path d="M 1050 36 L 50 36" fill="none" stroke="#34d399" stroke-width="2.5" stroke-dasharray="6 4" marker-end="url(#arrowEmerald)" />
+
+    <text x="590" y="26" text-anchor="middle" font-family="system-ui, sans-serif" font-size="13" font-weight="700" fill="#34d399">
+      ↓ 页面以"带编号的结构化文本"回传 (Structured Text Snapshot with Indexed Inventory)
+    </text>
+
+    <!-- 3 Core Return Highlights -->
+    <text x="160" y="62" text-anchor="middle" font-family="system-ui, sans-serif" font-size="11" fill="#cbd5e1">
+      ① 纯文本编号列表 [1]..[60] 极省 Token
+    </text>
+    <text x="590" y="62" text-anchor="middle" font-family="system-ui, sans-serif" font-size="11" fill="#cbd5e1">
+      ② 敏感表单字段在快照中自动脱敏掩码
+    </text>
+    <text x="1010" y="62" text-anchor="middle" font-family="system-ui, sans-serif" font-size="11" fill="#cbd5e1">
+      ③ 只有真正需要"看图"时才调用 browser_screenshot
+    </text>
+  </g>
+
+  <!-- ========================================================================= -->
+  <!-- 3 KEY DIFFERENTIATORS VS PLAYWRIGHT (BOTTOM BANNER)                       -->
+  <!-- ========================================================================= -->
+  <g transform="translate(50, 495)">
+    <!-- Column 1: Live Tab Continuity -->
+    <g transform="translate(0, 0)" filter="url(#shadow)">
+      <rect width="375" height="185" rx="12" fill="url(#cardGradHighlight)" stroke="#0284c7" stroke-width="1.2" />
+      <rect x="0" y="0" width="375" height="4" fill="#38bdf8" />
+      <circle cx="28" cy="28" r="12" fill="#0284c7" fill-opacity="0.3" />
+      <text x="28" y="33" text-anchor="middle" font-family="system-ui, sans-serif" font-size="14" font-weight="700" fill="#38bdf8">1</text>
+      
+      <text x="48" y="32" font-family="system-ui, sans-serif" font-size="15" font-weight="700" fill="#f8fafc">
+        接管你正在使用的那个标签页
+      </text>
+      <text x="20" y="58" font-family="system-ui, sans-serif" font-size="12" font-weight="600" fill="#38bdf8">
+        Live Tab Session Continuity (保留登录态)
+      </text>
+      <text x="20" y="86" font-family="system-ui, sans-serif" font-size="12" fill="#cbd5e1">
+        • 完整保留你的日常登录态、Cookies 与用户 Profile。
+      </text>
+      <text x="20" y="112" font-family="system-ui, sans-serif" font-size="12" fill="#cbd5e1">
+        • 打开即用，无需二次登录，免遭各种防爬验证码阻拦。
+      </text>
+      <text x="20" y="138" font-family="system-ui, sans-serif" font-size="12" fill="#cbd5e1">
+        • 支持伴随式协作，人在哪一个标签页，模型就服务哪一页。
+      </text>
+      <text x="20" y="166" font-family="system-ui, sans-serif" font-size="11" fill="#64748b">
+        Playwright 方案每次拉起空白冷实例，无用户现有登录会话。
+      </text>
+    </g>
+
+    <!-- Column 2: Zero Extra Browsers & Portless -->
+    <g transform="translate(402, 0)" filter="url(#shadow)">
+      <rect width="375" height="185" rx="12" fill="url(#cardGradHighlight)" stroke="#6366f1" stroke-width="1.2" />
+      <rect x="0" y="0" width="375" height="4" fill="#818cf8" />
+      <circle cx="28" cy="28" r="12" fill="#4f46e5" fill-opacity="0.3" />
+      <text x="28" y="33" text-anchor="middle" font-family="system-ui, sans-serif" font-size="14" font-weight="700" fill="#818cf8">2</text>
+      
+      <text x="48" y="32" font-family="system-ui, sans-serif" font-size="15" font-weight="700" fill="#f8fafc">
+        不开新浏览器 · 不要调试端口
+      </text>
+      <text x="20" y="58" font-family="system-ui, sans-serif" font-size="12" font-weight="600" fill="#818cf8">
+        Zero Extra Browsers &amp; Portless (安全轻量)
+      </text>
+      <text x="20" y="86" font-family="system-ui, sans-serif" font-size="12" fill="#cbd5e1">
+        • 原地运行在你的 Chrome/Edge 中，无多余子进程开销。
+      </text>
+      <text x="20" y="112" font-family="system-ui, sans-serif" font-size="12" fill="#cbd5e1">
+        • 不对外开放 --remote-debugging-port，零无凭据控制暴露面。
+      </text>
+      <text x="20" y="138" font-family="system-ui, sans-serif" font-size="12" fill="#cbd5e1">
+        • 本地回环 WebSocket 通信受独立 0600 Bearer Token 严密保护。
+      </text>
+      <text x="20" y="166" font-family="system-ui, sans-serif" font-size="11" fill="#64748b">
+        Playwright 需另行拉起独立浏览器进程并常驻调试端口。
+      </text>
+    </g>
+
+    <!-- Column 3: Text-First Token Economy -->
+    <g transform="translate(805, 0)" filter="url(#shadow)">
+      <rect width="375" height="185" rx="12" fill="url(#cardGradHighlight)" stroke="#10b981" stroke-width="1.2" />
+      <rect x="0" y="0" width="375" height="4" fill="#34d399" />
+      <circle cx="28" cy="28" r="12" fill="#059669" fill-opacity="0.3" />
+      <text x="28" y="33" text-anchor="middle" font-family="system-ui, sans-serif" font-size="14" font-weight="700" fill="#34d399">3</text>
+      
+      <text x="48" y="32" font-family="system-ui, sans-serif" font-size="15" font-weight="700" fill="#f8fafc">
+        结构化文本快照 · 极度节约 Token
+      </text>
+      <text x="20" y="58" font-family="system-ui, sans-serif" font-size="12" font-weight="600" fill="#34d399">
+        Text-First Token Economy (纯文本优先)
+      </text>
+      <text x="20" y="86" font-family="system-ui, sans-serif" font-size="12" fill="#cbd5e1">
+        • 页面以编号纯文本快照 [1]..[60] 交给模型，token 省 80%+。
+      </text>
+      <text x="20" y="112" font-family="system-ui, sans-serif" font-size="12" fill="#cbd5e1">
+        • 增量快照仅回传产生 DOM 变更的元素，避免上下文爆炸。
+      </text>
+      <text x="20" y="138" font-family="system-ui, sans-serif" font-size="12" fill="#cbd5e1">
+        • 只有用户或模型明确要求"看图"时才调用 browser_screenshot。
+      </text>
+      <text x="20" y="166" font-family="system-ui, sans-serif" font-size="11" fill="#64748b">
+        纯视觉 Agent 方案每步截屏消耗数千 Vision Token 且易对错坐标。
+      </text>
+    </g>
+  </g>
+</svg>
