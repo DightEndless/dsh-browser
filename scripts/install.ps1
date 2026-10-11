@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
 dsh-browser 一键安装（Windows）：支持远程托管安装和本地 checkout 安装。
 dsh-browser one-command install (Windows): supports both managed remote installs and local checkout installs.
@@ -31,7 +31,7 @@ $ManagedRoot = Join-Path $DshHomeDir 'dsh-browser'
 $ManagedMarker = Join-Path $ManagedRoot '.managed-by-install-sh'
 $ArchiveUrl = "https://github.com/$Repository/archive/refs/heads/$RemoteRef.zip"
 $LegacyPlugin = '@deepseek-ai/dsh-bridge-browser'
-$BridgePlugin = '@yuxianglin/dsh-bridge-browser'
+$BridgePlugin = '@dightendless/dsh-bridge-browser'
 
 function Write-Step {
   param([int]$Number, [string]$Zh, [string]$En)
