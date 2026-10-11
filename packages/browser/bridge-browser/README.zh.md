@@ -30,7 +30,13 @@ curl -fsSL https://raw.githubusercontent.com/DightEndless/dsh-browser/refs/heads
 cd ~/.dsh/dsh-browser && pnpm start
 ```
 
-不想构建的话，直接用预构建包：`npm i @dightendless/dsh-bridge-browser`，或把 `dsh plugin --profile web add` 指向 [v0.3.2 发行页](https://github.com/DightEndless/dsh-browser/releases/tag/v0.3.2) 上的 tgz。
+不想构建的话，直接装已发布的包：
+
+```sh
+dsh plugin --profile web add @dightendless/dsh-bridge-browser
+```
+
+这个名字会从 npm 解析到预构建包（手动管理 profile 就是 `npm i @dightendless/dsh-bridge-browser`）；同样的字节也以 tgz 形式挂在 [v0.3.2 发行页](https://github.com/DightEndless/dsh-browser/releases/tag/v0.3.2) 上，供离线安装。
 
 Windows 请改用 PowerShell 安装器：
 

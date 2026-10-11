@@ -32,7 +32,13 @@ Three routes. The integration contains both a dsh bridge plugin and a browser ex
 dsh plugin --profile web add https://github.com/DightEndless/dsh-browser/releases/download/v0.3.2/dightendless-dsh-bridge-browser-0.3.2.tgz
 ```
 
-The same package is on npm as [`@dightendless/dsh-bridge-browser`](https://www.npmjs.com/package/@dightendless/dsh-bridge-browser) (`npm i @dightendless/dsh-bridge-browser`), for setups that resolve the plugin from a registry rather than from a release asset.
+The same package is on npm, and the CLI takes it straight from there:
+
+```sh
+dsh plugin --profile web add @dightendless/dsh-bridge-browser
+```
+
+(`npm i @dightendless/dsh-bridge-browser` if you manage the profile by hand instead.)
 
 **2. Extension only**, prebuilt: download
 [`dsh-browser-extension-0.3.2.zip`](https://github.com/DightEndless/dsh-browser/releases/download/v0.3.2/dsh-browser-extension-0.3.2.zip),

@@ -30,7 +30,13 @@ curl -fsSL https://raw.githubusercontent.com/DightEndless/dsh-browser/refs/heads
 cd ~/.dsh/dsh-browser && pnpm start
 ```
 
-To skip the build, take the prebuilt package instead: `npm i @dightendless/dsh-bridge-browser`, or point `dsh plugin --profile web add` at the tarball attached to the [v0.3.2 release](https://github.com/DightEndless/dsh-browser/releases/tag/v0.3.2).
+To skip the build, install the published package instead:
+
+```sh
+dsh plugin --profile web add @dightendless/dsh-bridge-browser
+```
+
+That name resolves to the prebuilt package on npm (`npm i @dightendless/dsh-bridge-browser` if you manage the profile by hand); the same bytes are attached to the [v0.3.2 release](https://github.com/DightEndless/dsh-browser/releases/tag/v0.3.2) as a tarball for offline installs.
 
 On Windows, run the PowerShell installer instead:
 
