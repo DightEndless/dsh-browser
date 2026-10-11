@@ -1582,6 +1582,33 @@ function defineTools(call, options) {
 			return call(exec, "browser_use", a.browser === void 0 ? {} : { browser: a.browser });
 		}
 	});
+	const dialog = () => defineTool({
+		name: "browser_dialog",
+		description: withTargetHint("Respond to an active native JavaScript dialog (alert / confirm / prompt / beforeunload) on a frozen tab."),
+		parameters: {
+			action: {
+				type: "string",
+				required: true,
+				description: "Accept or dismiss the native dialog.",
+				enum: ["accept", "dismiss"]
+			},
+			promptText: {
+				type: "string",
+				description: "Text input when answering a prompt dialog."
+			},
+			browser: BROWSER_PARAMETER
+		},
+		timeoutMs: options.toolTimeoutMs,
+		output: TEXT_OUTPUT,
+		execute: (args, exec) => {
+			const a = args;
+			return call(exec, "browser_dialog", {
+				action: a.action,
+				...a.promptText !== void 0 ? { promptText: a.promptText } : {},
+				...a.browser !== void 0 ? { browser: a.browser } : {}
+			});
+		}
+	});
 	return [
 		use(),
 		snapshot(),
@@ -1593,6 +1620,7 @@ function defineTools(call, options) {
 		press(),
 		upload(),
 		evaluate(),
+		dialog(),
 		batch(),
 		scroll(),
 		navigate(),

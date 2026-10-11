@@ -54,6 +54,19 @@ describe('registerBrowserTools', () => {
     expect(result).toEqual({ text: 'ok' })
   })
 
+  it('executes browser_dialog with mapped args', async () => {
+    const { ctx, bridge, requestTool, registered } = makeHarness()
+    registerBrowserTools(ctx, bridge, { toolTimeoutMs: 1_000, snapshotMaxChars: 12_000, maxInteractiveItems: 60 })
+    const tool = registered.find((r) => r.name === 'browser_dialog')!
+    const exec = { signal: new AbortController().signal }
+    const result = await (tool.definition.execute as (args: unknown, e: { signal: AbortSignal }) => Promise<unknown>)(
+      { action: 'accept', promptText: 'hello' },
+      exec,
+    )
+    expect(requestTool).toHaveBeenCalledWith('browser_dialog', { action: 'accept', promptText: 'hello' }, exec.signal, { timeoutMs: 1_000 })
+    expect(result).toEqual({ text: 'ok' })
+  })
+
   it('associates browser calls with the owning Agent session', async () => {
     const { ctx, bridge, requestTool, registered } = makeHarness()
     registerBrowserTools(ctx, bridge, { toolTimeoutMs: 1_000, snapshotMaxChars: 12_000, maxInteractiveItems: 60 })

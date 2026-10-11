@@ -23,7 +23,7 @@ export interface BrowserToolsOptions {
     maxInteractiveItems: number;
 }
 /** The keys the extension accepts as wire action names (tool name == action name). */
-export declare const BROWSER_TOOL_NAMES: readonly ["browser_use", "browser_snapshot", "browser_click", "browser_click_at", "browser_hover", "browser_drag", "browser_type", "browser_press", "browser_upload", "browser_eval", "browser_batch", "browser_scroll", "browser_navigate", "browser_open_tab", "browser_list_tabs", "browser_follow_tab", "browser_close_tab", "browser_back", "browser_forward", "browser_reload", "browser_get_text", "browser_images", "browser_screenshot", "browser_wait"];
+export declare const BROWSER_TOOL_NAMES: readonly ["browser_use", "browser_snapshot", "browser_click", "browser_click_at", "browser_hover", "browser_drag", "browser_type", "browser_press", "browser_upload", "browser_eval", "browser_dialog", "browser_batch", "browser_scroll", "browser_navigate", "browser_open_tab", "browser_list_tabs", "browser_follow_tab", "browser_close_tab", "browser_back", "browser_forward", "browser_reload", "browser_get_text", "browser_images", "browser_screenshot", "browser_wait"];
 /**
  * Register the browser tools on `ctx.tools`. Disposers are returned for the
  * caller's effect to own; each tool's cooperative timeout budget is declared
