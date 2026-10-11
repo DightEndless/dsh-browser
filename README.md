@@ -79,7 +79,7 @@ Most browser-automation agent stacks rely on headless Playwright or Puppeteer. W
 
 1. **Active Tab vs. Cold Browser**: Playwright launches an isolated, blank browser instance with an empty cache. `dsh-browser` attaches directly to the Chrome or Edge tab you are already browsing in, so existing logins, cookies, session credentials, and user profiles remain instantly available without manual re-authentication or credentials sharing.
 2. **Zero Extra Processes or Debugging Ports**: Instead of spawning background browser processes with an open `--remote-debugging-port` (which exposes an unauthenticated control surface), `dsh-browser` operates via an unpacked MV3 extension communicating with the host over a local, bearer-token-authenticated loopback WebSocket.
-3. **Approval-Gated, Trusted Input**: While Playwright runs scripted events in an unattended loop, `dsh-browser` gates state-changing actions behind explicit user approval in the side panel. Inputs dispatch genuine CDP events (`isTrusted: true`) that modern web applications accept, while sensitive form values are masked in snapshots.
+3. **Approval-Gated, Trusted Input**: While Playwright runs scripted events in an unattended loop, `dsh-browser` gates state-changing actions behind explicit user approval in the side panel. While `browser_click` uses content script `el.click()` (synthetic event), coordinate clicks (`browser_click_at`), keyboard input (`browser_press`/`browser_type`), and drag/upload dispatch genuine CDP events (`isTrusted: true`) that modern web applications accept, while sensitive form values are masked in snapshots.
 
 ## Performance
 

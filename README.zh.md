@@ -80,7 +80,7 @@ $s="$env:TEMP\dsh-install.ps1"; irm https://raw.githubusercontent.com/DightEndle
 
 1. **接管正在使用的标签页 vs. 空白新浏览器**：Playwright 每次启动全新的干净浏览器实例，没有用户的日常登录状态与 Cookie；而 `dsh-browser` 直接接入你在 Chrome 或 Edge 中此刻正在浏览的标签页，完整保留现有登录凭据、会话与个性化配置，无需重复登录或传递账号密码。
 2. **零额外浏览器进程与调试端口**：无需在后台拉起第二个浏览器，也不对外开放 `--remote-debugging-port` 远程调试端口（该端口在本地网络上存在无凭据控制风险）。扩展与宿主桥接通过本地回环 WebSocket 进行，受独立的 bearer token 保护。
-3. **受信任输入与逐项人工审批**：与 Playwright 预设的全自动无人值守脚本不同，`dsh-browser` 专为人类协同设计。状态变更类操作在执行前会在侧边栏弹出原生审批卡片，经用户许可后方走 CDP 派发具有 `isTrusted: true` 标记的真实硬件级输入；表单敏感信息在快照中自动脱敏呈现。
+3. **受信任输入与逐项人工审批**：与 Playwright 预设的全自动无人值守脚本不同，`dsh-browser` 专为人类协同设计。状态变更类操作在执行前会在侧边栏弹出原生审批卡片；其中 `browser_click` 使用 content script 的 `el.click()`（合成事件），而坐标点击（`browser_click_at`）、键盘输入（`browser_press`/`browser_type`）与拖拽/上传等均经 CDP 派发具有 `isTrusted: true` 标记的真实硬件级输入；表单敏感信息在快照中自动脱敏呈现。
 
 ## 性能基准
 
