@@ -4,7 +4,28 @@
   "version": "0.3.0",
   "author": "Yuxiang Lin",
   "license": "MIT",
-  "private": true,
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "deepseek-harness",
+    "browser-automation",
+    "chrome-extension",
+    "edge-extension",
+    "ai-agent",
+    "cordis"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/DightEndless/dsh-browser.git",
+    "directory": "packages/browser/bridge-browser"
+  },
+  "homepage": "https://github.com/DightEndless/dsh-browser#readme",
+  "bugs": {
+    "url": "https://github.com/DightEndless/dsh-browser/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "dsh": {
     "bundle": {
       "patch": "./cordis.patch.yml"
