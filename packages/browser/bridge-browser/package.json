@@ -1,7 +1,7 @@
 {
   "name": "@dightendless/dsh-bridge-browser",
   "description": "Operate the Chrome or Edge tab you are already in, through the unpacked extension: hover, coordinate clicks, drag, batched actions, whole-page screenshots, file upload, image addresses and switching between connected browsers — with approval-gated actions and masked sensitive fields.",
-  "version": "0.3.3",
+  "version": "0.3.4",
   "author": "Yuxiang Lin",
   "license": "MIT",
   "keywords": [

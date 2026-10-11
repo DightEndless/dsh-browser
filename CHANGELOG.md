@@ -10,6 +10,40 @@ change:
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 0.3.4 — 2026-10-11
+
+### Added
+
+- **The extension now travels inside the plugin package.** Installing the bridge plugin used
+  to be half the story: the extension still had to be downloaded from a release asset and
+  unzipped by hand, so the "add plugin" box in DSH left every user one step short. The built
+  extension ships in the package now, and the plugin releases it to `~/.dsh/browser-extension`
+  on startup — so the whole install is one command, one restart, and one click on
+  **Load unpacked**.
+  - The release is idempotent: a `.dsh-extension-version` marker and the installed manifest are
+    both checked against the bundled manifest's version, so a second startup does nothing.
+  - An upgrade prunes files the new version no longer has, and re-copies when the version
+    changed, so an installed extension is never left half-old.
+  - Every failure is a warning rather than a crash. A read-only home directory, an unreadable
+    manifest, or a missing bundle leaves the plugin working and reports the bundled path (and
+    the reason) through `/ext/bridge-config`, which the panel shows as a manual fallback.
+  - The panel walks through the four steps and copies the directory path in one click.
+- `scripts/sync-extension-into-package.mjs` mirrors `extensions/dsh-browser/dist` into the
+  package, and `tests/extension-sync.spec.ts` compares the two trees file by file so they
+  cannot drift apart. `build-stamp.json` is deliberately excluded from that comparison: it
+  carries a build timestamp, so pinning it would fail the suite on every rebuild.
+
+### Notes
+
+- The extension code is unchanged: its zip differs from 0.3.3 in exactly two files,
+  `manifest.json` (the version) and `build-stamp.json` (build metadata) — every script and asset
+  is byte-identical. The plugin tarball grows from 92.7 kB to about 364 kB as npm reports it,
+  most of which is a single `.ico`.
+- Publishing has one extra step from here on. After changing the extension, rebuild it and
+  re-run the sync script before packing, or the snapshot inside the package is stale — the
+  consistency test fails loudly if that is forgotten.
+- `@deepseek-ai/dsh-home-paths` was already a peer dependency. No new runtime dependency and no
+  install-time script was added.
 ## 0.3.3 — 2026-10-11
 
 ### Added

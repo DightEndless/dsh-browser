@@ -29,7 +29,7 @@ Three routes. The integration contains both a dsh bridge plugin and a browser ex
 **1. Plugin only**, prebuilt, with no build step and no Git:
 
 ```sh
-dsh plugin --profile web add https://github.com/DightEndless/dsh-browser/releases/download/v0.3.3/dightendless-dsh-bridge-browser-0.3.3.tgz
+dsh plugin --profile web add https://github.com/DightEndless/dsh-browser/releases/download/v0.3.4/dightendless-dsh-bridge-browser-0.3.4.tgz
 ```
 
 The same package is on npm, and the CLI takes it straight from there:
@@ -41,7 +41,7 @@ dsh plugin --profile web add @dightendless/dsh-bridge-browser
 (`npm i @dightendless/dsh-bridge-browser` if you manage the profile by hand instead. After installing the plugin, open the panel and follow the instructions to load the extension.)
 
 **2. Extension only**, prebuilt: download
-[`dsh-browser-extension-0.3.3.zip`](https://github.com/DightEndless/dsh-browser/releases/download/v0.3.3/dsh-browser-extension-0.3.3.zip),
+[`dsh-browser-extension-0.3.4.zip`](https://github.com/DightEndless/dsh-browser/releases/download/v0.3.4/dsh-browser-extension-0.3.4.zip),
 unzip it, then open `chrome://extensions` (Edge: `edge://extensions`), turn on **Developer mode**, choose **Load unpacked**, and select the folder that came out of the zip.
 
 Routes 1 and 2 together are the whole product, and neither needs Node, pnpm, or Git.
