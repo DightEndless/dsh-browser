@@ -25,6 +25,7 @@ import { resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { classifyTarget } from './build-crash.mjs'
 import { copyTree } from './copy-tree.mjs'
+import { writeBuildStamp } from './build-stamp.mjs'
 
 const root = fileURLToPath(new URL('..', import.meta.url))
 const watch = process.argv.includes('--watch')
@@ -178,6 +179,7 @@ if (watch) {
   syncStaticFiles()
   assertDistComplete()
   tagEdgeManifest()
+  writeBuildStamp(distDir, root)
   if (teardownCrashes > 0) {
     console.warn(`build: ${teardownCrashes} target(s) crashed after writing output — Node ${process.version} does this on Windows; the artifacts were completed from source`)
   }
