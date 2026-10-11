@@ -10,6 +10,37 @@ change:
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 0.3.0 — 2026-10-11
+
+### Fixed
+
+- **An approved pointer action can no longer be redirected by the page.** A snapshot
+  number was resolved to a point through the `data-dsh-el` attribute, which any page
+  script can read, move, or invent; `browser_click_at`, `browser_hover` and
+  `browser_drag` now resolve it through the content script's registry in the
+  extension's isolated world instead. Verified live against a forged attribute.
+- **A reloaded extension no longer fills the error list.** The content script left in
+  open tabs after a reload called into a dead `chrome.runtime`, which throws
+  synchronously, so "Extension context invalidated" escaped every `.catch()`. Calls
+  out check the context first, and an orphaned selection watcher disposes itself.
+- **`browser_batch` answers as failed when a step fails**, carrying the per-step
+  report in the message instead of reporting success with the failure in prose.
+
+### Changed
+
+- **The package description is market-facing** (it is what listings and package
+  views show first) instead of a sentence an automated evaluator read as "needs an
+  API key".
+- **Install links point at this release**: the plugin tarball and the extension zip
+  both come from `v0.3.0`.
+
+### Distribution
+
+- `dightendless-dsh-bridge-browser-0.3.0.tgz` — prebuilt plugin package.
+- `dsh-browser-extension-0.3.0.zip` — prebuilt extension (forward-slash zip entries).
+- The `v0.2.0` assets were rebuilt in place so their URLs install the corrected
+  README rather than one that pointed at the upstream repository.
+
 ## Standalone fork release — 2026-10-10
 
 Distribution changes that make this tree installable on its own, without the
