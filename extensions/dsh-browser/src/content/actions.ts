@@ -10,7 +10,7 @@
  * @module
  */
 
-import { pageText, truncate } from './extract.ts'
+import { findAssociatedCheckableInput, pageText, truncate } from './extract.ts'
 import { collectPageImages, normalizeImageLimit, renderImageScan } from './images.ts'
 import type { ElementIds } from './ids.ts'
 import type { SnapshotBudget } from './snapshot.ts'
@@ -330,6 +330,12 @@ async function clickAction(args: Record<string, unknown>, ctx: ActionContext): P
   if (el instanceof HTMLButtonElement && el.disabled) {
     throw new ActionError('action-failed', `Button [${index}] is disabled.`)
   }
+  if (el instanceof HTMLLabelElement) {
+    const input = findAssociatedCheckableInput(el)
+    if (input !== null && input.disabled) {
+      throw new ActionError('action-failed', `Control [${index}] is disabled.`)
+    }
+  }
   ;(el as HTMLElement).click()
   await waitForPageSettled(ACTION_SETTLE)
   return withPageDelta(`Clicked [${index}].`, ctx)
@@ -455,10 +461,21 @@ async function typeAction(args: Record<string, unknown>, ctx: ActionContext): Pr
     return withPageDelta(note, ctx)
   }
   if (el instanceof HTMLInputElement && (el.type === 'checkbox' || el.type === 'radio')) {
+    if (el.disabled) throw new ActionError('action-failed', `Control [${index}] is disabled.`)
     const desired = parseToggle(text, el.type)
     if (el.checked !== desired) el.click()
     await waitForPageSettled(TYPE_SETTLE)
     return withPageDelta(`Set the ${el.type} to ${desired ? 'checked' : 'unchecked'}.`, ctx)
+  }
+  if (el instanceof HTMLLabelElement) {
+    const input = findAssociatedCheckableInput(el)
+    if (input !== null) {
+      if (input.disabled) throw new ActionError('action-failed', `Control [${index}] is disabled.`)
+      const desired = parseToggle(text, input.type)
+      if (input.checked !== desired) el.click()
+      await waitForPageSettled(TYPE_SETTLE)
+      return withPageDelta(`Set the ${input.type} to ${desired ? 'checked' : 'unchecked'}.`, ctx)
+    }
   }
   if (isEditable(el)) {
     typeIntoContentEditable(el, text, replace)

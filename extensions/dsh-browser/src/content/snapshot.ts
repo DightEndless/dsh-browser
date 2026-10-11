@@ -10,7 +10,7 @@
  * @module
  */
 
-import { accessibleName, collectInteractive, isInViewport, isVisible, mainText, pageText, truncate } from './extract.ts'
+import { accessibleName, collectInteractive, findAssociatedCheckableInput, isInViewport, isVisible, mainText, pageText, truncate } from './extract.ts'
 import { ElementIds } from './ids.ts'
 import { isSensitiveField, maskValue } from './privacy.ts'
 
@@ -18,6 +18,12 @@ import { isSensitiveField, maskValue } from './privacy.ts'
 function roleOf(el: Element): string {
   const role = el.getAttribute('role')
   if (role !== null && role !== '') return role
+  if (el instanceof HTMLLabelElement) {
+    const input = findAssociatedCheckableInput(el)
+    if (input !== null && !isVisible(input)) {
+      return input.type
+    }
+  }
   if (el instanceof HTMLAnchorElement) return 'link'
   if (el instanceof HTMLButtonElement) return 'button'
   if (el instanceof HTMLInputElement) {
@@ -218,6 +224,12 @@ export function buildSnapshot(ids: ElementIds, options: SnapshotOptions, last: S
     if (el instanceof HTMLInputElement) {
       if (el.disabled) item.disabled = true
       if (el.type === 'checkbox' || el.type === 'radio') item.checked = el.checked
+    } else if (el instanceof HTMLLabelElement) {
+      const input = findAssociatedCheckableInput(el)
+      if (input !== null) {
+        if (input.disabled) item.disabled = true
+        if (input.type === 'checkbox' || input.type === 'radio') item.checked = input.checked
+      }
     }
     const ariaChecked = el.getAttribute('aria-checked')
     if (ariaChecked === 'true' || ariaChecked === 'false') item.checked = ariaChecked === 'true'
@@ -230,12 +242,26 @@ export function buildSnapshot(ids: ElementIds, options: SnapshotOptions, last: S
   // reuse that scan instead of querying, styling, and measuring them again.
   const formElements = elements.filter((el) => el instanceof HTMLInputElement
     || el instanceof HTMLSelectElement
-    || el instanceof HTMLTextAreaElement)
+    || el instanceof HTMLTextAreaElement
+    || (el instanceof HTMLLabelElement && findAssociatedCheckableInput(el) !== null))
   const forms: FormFieldView[] = []
   for (const el of formElements.slice(0, options.budget.maxForms)) {
     const index = ids.indexOf(el)
     if (index === undefined) continue
     const masked = isSensitiveField(el)
+    if (el instanceof HTMLLabelElement) {
+      const input = findAssociatedCheckableInput(el)!
+      forms.push({
+        index,
+        label: nameOf(el),
+        kind: input.type,
+        value: '',
+        masked: false,
+        checked: input.checked,
+        ...input.required ? { required: true } : {},
+      })
+      continue
+    }
     const checkable = el instanceof HTMLInputElement && (el.type === 'checkbox' || el.type === 'radio')
     const value = checkable
       ? ''

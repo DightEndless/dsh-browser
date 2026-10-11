@@ -91,6 +91,23 @@ export function truncate(text: string, max: number): { text: string; truncated: 
  * @returns a ≤80-char name, or the tag name as last resort.
  */
 export function accessibleName(el: Element): string {
+  if (el instanceof HTMLLabelElement) {
+    const input = findAssociatedCheckableInput(el)
+    if (input !== null && !isVisible(input)) {
+      const labelAria = el.getAttribute('aria-label')
+      let labelReferenced: string | undefined
+      const labelBy = el.getAttribute('aria-labelledby')
+      if (labelBy !== null) {
+        const ref = el.ownerDocument.getElementById(labelBy.split(/\s+/)[0] ?? '')
+        labelReferenced = ref === null ? undefined : nameText(ref)
+      }
+      const base = labelAria || labelReferenced || nameText(el) || input.getAttribute('aria-label') || input.name || input.type
+      const cleaned = clean(base)
+      const name = cleaned !== '' ? cleaned : input.type
+      return `${truncate(name, MAX_ITEM_NAME_CHARS - 13).text} (via label)`
+    }
+  }
+
   const ariaLabel = el.getAttribute('aria-label')
   if (ariaLabel !== null && ariaLabel.trim() !== '') return truncate(clean(ariaLabel), MAX_ITEM_NAME_CHARS).text
 
@@ -150,6 +167,64 @@ function cssEscape(value: string): string {
 }
 
 /**
+ * Find the associated checkable input (checkbox or radio) for a label.
+ */
+export function findAssociatedCheckableInput(label: HTMLLabelElement): HTMLInputElement | null {
+  const control = label.control
+  if (control instanceof HTMLInputElement && (control.type === 'checkbox' || control.type === 'radio')) {
+    return control
+  }
+  if (label.htmlFor !== '') {
+    const target = label.ownerDocument.getElementById(label.htmlFor)
+    if (target instanceof HTMLInputElement && (target.type === 'checkbox' || target.type === 'radio')) {
+      return target
+    }
+  }
+  const nested = label.querySelector('input[type="checkbox"], input[type="radio"]')
+  if (nested instanceof HTMLInputElement) {
+    return nested
+  }
+  return null
+}
+
+/**
+ * Check whether a label is a reasonable, size-controlled proxy for a hidden input.
+ * Avoids indexing full-page or giant wrapper labels.
+ */
+export function isReasonableProxyLabel(label: HTMLLabelElement): boolean {
+  if (!isVisible(label)) return false
+  const rect = label.getBoundingClientRect()
+  const innerW = typeof window !== 'undefined' && typeof window.innerWidth === 'number' && !Number.isNaN(window.innerWidth)
+    ? window.innerWidth
+    : 1024
+  const innerH = typeof window !== 'undefined' && typeof window.innerHeight === 'number' && !Number.isNaN(window.innerHeight)
+    ? window.innerHeight
+    : 768
+  const maxW = Math.max(innerW * 0.8, 600)
+  const maxH = Math.max(innerH * 0.5, 300)
+  if (rect.width > maxW || rect.height > maxH) return false
+  return true
+}
+
+/**
+ * For a hidden checkbox/radio input, find its visible and size-controlled label proxy.
+ */
+function findVisibleProxyLabel(input: HTMLInputElement): HTMLLabelElement | null {
+  const doc = input.ownerDocument
+  const wrapping = input.closest('label')
+  if (wrapping instanceof HTMLLabelElement && isReasonableProxyLabel(wrapping)) {
+    return wrapping
+  }
+  if (input.id !== '') {
+    const explicit = doc.querySelector<HTMLLabelElement>(`label[for="${cssEscape(input.id)}"]`)
+    if (explicit instanceof HTMLLabelElement && isReasonableProxyLabel(explicit)) {
+      return explicit
+    }
+  }
+  return null
+}
+
+/**
  * Collect the page's interactive elements in document order, deduplicated and
  * visibility-filtered.
  * @param root - document or element to scan.
@@ -161,7 +236,15 @@ export function collectInteractive(root: Document | Element): Element[] {
   for (const el of root.querySelectorAll(INTERACTIVE_SELECTOR)) {
     if (seen.has(el)) continue
     seen.add(el)
-    if (isVisible(el)) result.push(el)
+    if (isVisible(el)) {
+      result.push(el)
+    } else if (el instanceof HTMLInputElement && (el.type === 'checkbox' || el.type === 'radio')) {
+      const proxyLabel = findVisibleProxyLabel(el)
+      if (proxyLabel !== null && !seen.has(proxyLabel)) {
+        seen.add(proxyLabel)
+        result.push(proxyLabel)
+      }
+    }
   }
   return result
 }

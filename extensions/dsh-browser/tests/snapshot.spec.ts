@@ -136,4 +136,94 @@ describe('buildSnapshot', () => {
     expect(view.main).toContain('主体内容区')
     expect(view.main).not.toContain('侧边栏内容')
   })
+
+  it('indexes visible label proxies for CSS-hidden checkboxes (Tailwind & Ant Design patterns)', () => {
+    document.body.innerHTML = `
+      <!-- Tailwind style custom switch: input is opacity:0, label is visible container -->
+      <label class="switch-container" id="tailwind-switch" style="display: inline-block;">
+        <input type="checkbox" id="tailwind-cb" style="opacity: 0;" />
+        <span class="slider">开启自动同步</span>
+      </label>
+
+      <!-- Ant Design style checkbox: input is opacity:0, label associated via for -->
+      <label for="antd-cb" id="antd-label" style="display: inline-block;">
+        记住我
+      </label>
+      <span class="ant-checkbox">
+        <input type="checkbox" id="antd-cb" style="opacity: 0;" />
+      </span>
+
+      <!-- Label with explicit aria-label -->
+      <label id="aria-label-switch" aria-label="夜间模式" style="display: inline-block;">
+        <input type="checkbox" id="aria-cb" style="opacity: 0;" />
+        <span class="icon">🌙</span>
+      </label>
+
+      <!-- Giant wrapping label: full page wrapper (> 80% viewport width or > 50% height) -->
+      <label id="giant-label" style="display: block;">
+        <input type="checkbox" id="giant-cb" style="opacity: 0;" />
+        <div>大量正文内容...</div>
+      </label>
+    `
+
+    vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (this: Element) {
+      if (this.id === 'giant-label') {
+        return { top: 0, left: 0, width: 1900, height: 1200, bottom: 1200, right: 1900, x: 0, y: 0, toJSON: () => ({}) } as DOMRect
+      }
+      return { top: 0, left: 0, width: 120, height: 30, bottom: 30, right: 120, x: 0, y: 0, toJSON: () => ({}) } as DOMRect
+    })
+
+    const ids = new ElementIds()
+    const view = buildSnapshot(ids, { budget: BUDGET }, null)
+
+    // (a) Hidden inputs themselves are NOT in the items inventory
+    const tailwindInput = document.getElementById('tailwind-cb')!
+    const antdInput = document.getElementById('antd-cb')!
+    const giantInput = document.getElementById('giant-cb')!
+    expect(ids.indexOf(tailwindInput)).toBeUndefined()
+    expect(ids.indexOf(antdInput)).toBeUndefined()
+    expect(ids.indexOf(giantInput)).toBeUndefined()
+
+    // (b) Visible proxies ARE indexed with (via label)
+    const tailwindLabel = document.getElementById('tailwind-switch')!
+    const antdLabel = document.getElementById('antd-label')!
+    const tailwindIndex = ids.indexOf(tailwindLabel)
+    const antdIndex = ids.indexOf(antdLabel)
+    expect(tailwindIndex).toBeDefined()
+    expect(antdIndex).toBeDefined()
+
+    const tailwindItem = view.items.find((item) => item.index === tailwindIndex)
+    expect(tailwindItem).toMatchObject({
+      role: 'checkbox',
+      name: expect.stringContaining('(via label)'),
+      checked: false,
+    })
+
+    const antdItem = view.items.find((item) => item.index === antdIndex)
+    expect(antdItem).toMatchObject({
+      role: 'checkbox',
+      name: expect.stringContaining('记住我 (via label)'),
+      checked: false,
+    })
+
+    const ariaLabelSwitch = document.getElementById('aria-label-switch')!
+    const ariaIndex = ids.indexOf(ariaLabelSwitch)
+    expect(ariaIndex).toBeDefined()
+    const ariaItem = view.items.find((item) => item.index === ariaIndex)
+    expect(ariaItem).toMatchObject({
+      role: 'checkbox',
+      name: '夜间模式 (via label)',
+      checked: false,
+    })
+
+    // (d) Giant wrapping label is NOT indexed
+    const giantLabel = document.getElementById('giant-label')!
+    expect(ids.indexOf(giantLabel)).toBeUndefined()
+
+    // Rendered text check
+    const text = renderSnapshot(view, false)
+    expect(text).toContain('checkbox "开启自动同步 (via label)" [unchecked]')
+    expect(text).toContain('checkbox "记住我 (via label)" [unchecked]')
+    expect(text).not.toContain('giant')
+  })
 })

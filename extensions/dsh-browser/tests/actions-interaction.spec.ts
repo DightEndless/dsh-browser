@@ -231,4 +231,67 @@ describe('browser_wait conditions', () => {
     await vi.advanceTimersByTimeAsync(5_000)
     await rejected
   })
+
+  it('browser_click flips checked state on proxy label for hidden checkbox', async () => {
+    document.body.innerHTML = `
+      <label id="proxy-label">
+        <input type="checkbox" id="hidden-cb" style="opacity: 0;">
+        <span>同意服务条款</span>
+      </label>
+    `
+    const cb = document.getElementById('hidden-cb') as HTMLInputElement
+    expect(cb.checked).toBe(false)
+
+    const ids = await snapshotIds()
+    const label = document.getElementById('proxy-label')!
+    label.scrollIntoView = vi.fn()
+    const labelIndex = ids.indexOf(label)!
+    expect(labelIndex).toBeDefined()
+
+    await run(ids, 'browser_click', { index: labelIndex })
+    expect(cb.checked).toBe(true)
+
+    await run(ids, 'browser_click', { index: labelIndex })
+    expect(cb.checked).toBe(false)
+  })
+
+  it('browser_click and browser_type support separate label and reject disabled proxy labels', async () => {
+    document.body.innerHTML = `
+      <label for="hidden-cb-separate" id="proxy-label-separate">独立标签</label>
+      <input type="checkbox" id="hidden-cb-separate" style="opacity: 0;">
+
+      <label id="proxy-label-disabled">
+        <input type="checkbox" id="hidden-cb-disabled" disabled style="opacity: 0;">
+        <span>禁用开关</span>
+      </label>
+    `
+    const cbSeparate = document.getElementById('hidden-cb-separate') as HTMLInputElement
+    const ids = await snapshotIds()
+    const labelSeparate = document.getElementById('proxy-label-separate')!
+    labelSeparate.scrollIntoView = vi.fn()
+    const sepIndex = ids.indexOf(labelSeparate)!
+    expect(sepIndex).toBeDefined()
+
+    // Test browser_type on proxy label
+    await run(ids, 'browser_type', { index: sepIndex, text: 'true' })
+    expect(cbSeparate.checked).toBe(true)
+    await run(ids, 'browser_type', { index: sepIndex, text: 'false' })
+    expect(cbSeparate.checked).toBe(false)
+
+    // Test disabled proxy label rejection
+    const labelDisabled = document.getElementById('proxy-label-disabled')!
+    labelDisabled.scrollIntoView = vi.fn()
+    const disIndex = ids.indexOf(labelDisabled)!
+    expect(disIndex).toBeDefined()
+
+    const pendingClick = runAction('browser_click', { index: disIndex }, { ids, budget: BUDGET })
+    const rejectedClick = expect(pendingClick).rejects.toThrow(/disabled/)
+    await vi.advanceTimersByTimeAsync(5_000)
+    await rejectedClick
+
+    const pendingType = runAction('browser_type', { index: disIndex, text: 'true' }, { ids, budget: BUDGET })
+    const rejectedType = expect(pendingType).rejects.toThrow(/disabled/)
+    await vi.advanceTimersByTimeAsync(5_000)
+    await rejectedType
+  })
 })
