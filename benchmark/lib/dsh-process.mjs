@@ -1,6 +1,7 @@
 import { spawn } from 'node:child_process'
 import { createWriteStream } from 'node:fs'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
+import { createRequire } from 'node:module'
 import { join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { waitForDsh } from './dsh-client.mjs'
@@ -58,7 +59,8 @@ export async function startDshBackend({
   await writeFile(patch, patchText)
   const logPath = join(logsRoot, `dsh-${backend}.log`)
   const log = createWriteStream(logPath, { flags: 'a' })
-  const child = spawn('pnpm', ['exec', 'dsh', '--profile', 'web', '--patch', patch, '--', '--no-open', '--port', String(port)], {
+  const dshBin = createRequire(import.meta.url).resolve('@deepseek-ai/dsh/lib/bin.js')
+  const child = spawn(process.execPath, [dshBin, '--profile', 'web', '--patch', patch, '--', '--no-open', '--port', String(port)], {
     cwd: repoRoot,
     env: {
       ...process.env,
