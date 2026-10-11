@@ -72,6 +72,7 @@ const TAB_NATIVE_TOOLS = new Set([
   'browser_back',
   'browser_forward',
   'browser_reload',
+  'browser_dialog',
 ])
 const STATE_CHANGING_PAGE_TOOLS = new Set([
   'browser_click',
@@ -340,6 +341,7 @@ async function dispatchTabNativeTool(
         break
       case 'browser_reload':
         commitAction?.()
+        handleTabNavigating(tabId)
         operation = chrome.tabs.reload(tabId)
         text = 'The page is reloading. Call browser_snapshot again after it loads.'
         break
@@ -616,6 +618,187 @@ function renderRemoteValue(remote: RemoteValue | undefined): string {
   return remote.description ?? `(${remote.type ?? 'value'})`
 }
 
+export interface PendingDialogState {
+  tabId: number
+  type: 'alert' | 'confirm' | 'prompt' | 'beforeunload'
+  message: string
+  defaultPrompt?: string
+  openedAt: number
+  debuggee: chrome.debugger.Debuggee
+  resolveTimeout?: ReturnType<typeof setTimeout>
+}
+
+export interface TimedOutDialogState {
+  type: string
+  message: string
+  timedOutAt: number
+}
+
+export const DEFAULT_DIALOG_HOLD_TIMEOUT_MS = 60_000
+let dialogHoldTimeoutMs = DEFAULT_DIALOG_HOLD_TIMEOUT_MS
+
+const pendingDialogsByTab = new Map<number, PendingDialogState>()
+const timedOutDialogsByTab = new Map<number, TimedOutDialogState>()
+const activeDialogListenersByTab = new Map<number, (pending: PendingDialogState) => void>()
+
+export function setDialogHoldTimeoutMsForTesting(ms: number): void {
+  dialogHoldTimeoutMs = ms
+}
+
+export function getPendingDialog(tabId: number): PendingDialogState | undefined {
+  return pendingDialogsByTab.get(tabId)
+}
+
+export function getTimedOutDialog(tabId: number): TimedOutDialogState | undefined {
+  return timedOutDialogsByTab.get(tabId)
+}
+
+export function clearPendingDialogs(): void {
+  for (const pending of pendingDialogsByTab.values()) {
+    if (pending.resolveTimeout) clearTimeout(pending.resolveTimeout)
+  }
+  pendingDialogsByTab.clear()
+  timedOutDialogsByTab.clear()
+  activeDialogListenersByTab.clear()
+}
+
+export function formatDialogOpeningWarning(pending: { type: string; message: string; defaultPrompt?: string }): string {
+  switch (pending.type) {
+    case 'confirm':
+      return `[Native JS dialog opened: confirm("${pending.message}") — WARNING: Tab is frozen. Call browser_dialog with action: 'accept' or 'dismiss', or call browser_reload to abort.]`
+    case 'prompt': {
+      const def = pending.defaultPrompt !== undefined && pending.defaultPrompt !== '' ? `, default: "${pending.defaultPrompt}"` : ''
+      return `[Native JS dialog opened: prompt("${pending.message}"${def}) — WARNING: Tab is frozen. Call browser_dialog with action: 'accept' (with optional promptText) or 'dismiss', or call browser_reload to abort.]`
+    }
+    case 'alert':
+      return `[Native JS dialog opened: alert("${pending.message}") — WARNING: Tab is frozen. Call browser_dialog with action: 'dismiss', or call browser_reload to abort.]`
+    case 'beforeunload':
+      return `[Native JS dialog opened: beforeunload("${pending.message}") — WARNING: Tab is frozen. Call browser_dialog with action: 'accept' (leave) or 'dismiss' (stay), or call browser_reload to abort.]`
+    default:
+      return `[Native JS dialog opened: ${pending.type}("${pending.message}") — WARNING: Tab is frozen. Call browser_dialog with action: 'accept' or 'dismiss', or call browser_reload to abort.]`
+  }
+}
+
+export function handleDialogOpening(
+  tabId: number,
+  debuggee: chrome.debugger.Debuggee,
+  params: {
+    url?: string
+    message: string
+    type: 'alert' | 'confirm' | 'prompt' | 'beforeunload'
+    defaultPrompt?: string
+  },
+): PendingDialogState {
+  const existing = pendingDialogsByTab.get(tabId)
+  if (existing?.resolveTimeout) clearTimeout(existing.resolveTimeout)
+
+  const pending: PendingDialogState = {
+    tabId,
+    type: params.type,
+    message: params.message ?? '',
+    defaultPrompt: params.defaultPrompt,
+    openedAt: Date.now(),
+    debuggee,
+  }
+
+  pending.resolveTimeout = setTimeout(() => {
+    const current = pendingDialogsByTab.get(tabId)
+    if (current === pending) {
+      pendingDialogsByTab.delete(tabId)
+      timedOutDialogsByTab.set(tabId, {
+        type: pending.type,
+        message: pending.message,
+        timedOutAt: Date.now(),
+      })
+      try {
+        void chrome.debugger.detach(pending.debuggee)
+      } catch {
+        // Detach might fail if already disconnected
+      }
+      resetTabSnapshot(tabId)
+    }
+  }, dialogHoldTimeoutMs)
+
+  pendingDialogsByTab.set(tabId, pending)
+  timedOutDialogsByTab.delete(tabId)
+  resetTabSnapshot(tabId)
+
+  const listener = activeDialogListenersByTab.get(tabId)
+  if (listener !== undefined) {
+    listener(pending)
+  }
+  return pending
+}
+
+export function handleDialogClosed(tabId: number, _params?: { result?: boolean; userInput?: string }): void {
+  const pending = pendingDialogsByTab.get(tabId)
+  if (pending !== undefined) {
+    if (pending.resolveTimeout) clearTimeout(pending.resolveTimeout)
+    pendingDialogsByTab.delete(tabId)
+    timedOutDialogsByTab.delete(tabId)
+    try {
+      void chrome.debugger.detach(pending.debuggee)
+    } catch {}
+    resetTabSnapshot(tabId)
+  }
+}
+
+export function handleDebuggerDetached(tabId: number): void {
+  const pending = pendingDialogsByTab.get(tabId)
+  if (pending !== undefined) {
+    if (pending.resolveTimeout) clearTimeout(pending.resolveTimeout)
+    pendingDialogsByTab.delete(tabId)
+    resetTabSnapshot(tabId)
+  }
+}
+
+export function handleTabNavigating(tabId: number): void {
+  const pending = pendingDialogsByTab.get(tabId)
+  if (pending !== undefined) {
+    if (pending.resolveTimeout) clearTimeout(pending.resolveTimeout)
+    pendingDialogsByTab.delete(tabId)
+    try {
+      void chrome.debugger.detach(pending.debuggee)
+    } catch {}
+    resetTabSnapshot(tabId)
+  }
+  timedOutDialogsByTab.delete(tabId)
+}
+
+if (typeof chrome !== 'undefined') {
+  if (chrome.debugger?.onEvent?.addListener) {
+    chrome.debugger.onEvent.addListener((source, method, params) => {
+      const tabId = source.tabId
+      if (typeof tabId !== 'number') return
+      if (method === 'Page.javascriptDialogOpening') {
+        handleDialogOpening(tabId, source, params as { message: string; type: 'alert' | 'confirm' | 'prompt' | 'beforeunload'; defaultPrompt?: string })
+      } else if (method === 'Page.javascriptDialogClosed') {
+        handleDialogClosed(tabId, params as { result?: boolean; userInput?: string })
+      }
+    })
+  }
+  if (chrome.debugger?.onDetach?.addListener) {
+    chrome.debugger.onDetach.addListener((source) => {
+      const tabId = source.tabId
+      if (typeof tabId === 'number') {
+        handleDebuggerDetached(tabId)
+      }
+    })
+  }
+  if (chrome.tabs?.onUpdated?.addListener) {
+    chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
+      if (changeInfo.status === 'loading') {
+        handleTabNavigating(tabId)
+      }
+    })
+  }
+  if (chrome.tabs?.onRemoved?.addListener) {
+    chrome.tabs.onRemoved.addListener((tabId) => {
+      handleTabNavigating(tabId)
+    })
+  }
+}
+
 /**
  * Run one DevTools-protocol task against a tab, attaching first and always
  * detaching afterwards.
@@ -629,6 +812,7 @@ async function runWithDebugger(
   tabId: number,
   run: (target: chrome.debugger.Debuggee) => Promise<ToolAnswer>,
   check: () => ToolAnswer | undefined = () => undefined,
+  commitAction?: () => void,
 ): Promise<ToolAnswer> {
   const initial = check()
   if (initial !== undefined) return initial
@@ -655,19 +839,75 @@ async function runWithDebugger(
     try { await chrome.debugger.detach(target) } catch { /* already detached */ }
     return attachedCheck
   }
+
+  let dialogListener: ((pending: PendingDialogState) => void) | undefined
+  const dialogOpenedPromise = new Promise<PendingDialogState>((resolve) => {
+    dialogListener = resolve
+  })
+  activeDialogListenersByTab.set(tabId, dialogListener!)
+
   try {
-    return await run(target)
-  } finally {
     try {
-      await chrome.debugger.detach(target)
+      await chrome.debugger.sendCommand(target, 'Page.enable')
     } catch {
-      // Already detached; nothing left to release.
+      // Best-effort Page.enable
+    }
+
+    const runPromise = run(target).then(
+      (result) => ({ kind: 'completed' as const, result }),
+      (error: unknown) => ({ kind: 'error' as const, error }),
+    )
+
+    const outcome = await Promise.race([
+      runPromise,
+      dialogOpenedPromise.then((pending) => ({ kind: 'dialog' as const, pending })),
+    ])
+
+    if (outcome.kind === 'dialog' || pendingDialogsByTab.has(tabId)) {
+      const pending = outcome.kind === 'dialog' ? outcome.pending : pendingDialogsByTab.get(tabId)!
+      return {
+        ok: true,
+        result: {
+          text: formatDialogOpeningWarning(pending),
+        },
+      }
+    }
+
+    if (outcome.kind === 'error') {
+      throw outcome.error
+    }
+
+    if (outcome.result.ok) {
+      commitAction?.()
+    }
+    return outcome.result
+  } catch (error: unknown) {
+    if (pendingDialogsByTab.has(tabId)) {
+      const pending = pendingDialogsByTab.get(tabId)!
+      return {
+        ok: true,
+        result: {
+          text: formatDialogOpeningWarning(pending),
+        },
+      }
+    }
+    throw error
+  } finally {
+    activeDialogListenersByTab.delete(tabId)
+    if (pendingDialogsByTab.has(tabId)) {
+      // Keep debugger attached so browser_dialog can send Page.handleJavaScriptDialog!
+    } else {
+      try {
+        await chrome.debugger.detach(target)
+      } catch {
+        // Already detached; nothing left to release.
+      }
     }
   }
 }
 
 /** Evaluate one expression in the page and render whatever comes back. */
-async function dispatchEval(tabId: number, call: ToolCall, signal?: AbortSignal): Promise<ToolAnswer> {
+async function dispatchEval(tabId: number, call: ToolCall, signal?: AbortSignal, commitAction?: () => void): Promise<ToolAnswer> {
   if (isCancelled(call, signal)) return cancelled()
   const expression = typeof call.args.expression === 'string' ? call.args.expression : ''
   if (expression.trim() === '') return unavailable('browser_eval needs a non-empty expression.')
@@ -698,7 +938,7 @@ async function dispatchEval(tabId: number, call: ToolCall, signal?: AbortSignal)
       const detail = error instanceof Error ? error.message : String(error)
       return unavailable(`The expression could not be evaluated: ${detail}`)
     }
-  })
+  }, () => undefined, commitAction)
 }
 
 /** One resolved viewport point in CSS pixels, with the viewport that produced it. */
@@ -869,7 +1109,7 @@ function sleep(ms: number): Promise<void> {
  * on `isTrusted` — and any target that has no element to address, such as a spot
  * inside an image — need the debugger instead.
  */
-async function dispatchClickAt(tabId: number, call: ToolCall, signal?: AbortSignal): Promise<ToolAnswer> {
+async function dispatchClickAt(tabId: number, call: ToolCall, signal?: AbortSignal, commitAction?: () => void): Promise<ToolAnswer> {
   if (isCancelled(call, signal)) return cancelled()
   const point = await resolvePoint(tabId, call.args)
   if (isToolAnswer(point)) return point
@@ -886,7 +1126,7 @@ async function dispatchClickAt(tabId: number, call: ToolCall, signal?: AbortSign
       ok: true,
       result: { text: `Clicked ${point.label} of ${point.width}×${point.height}${scrolledNote}.` },
     }
-  })
+  }, () => undefined, commitAction)
 }
 
 /** How long a hover rests before answering, so the page can reveal what it hides. */
@@ -902,7 +1142,7 @@ const DRAG_STEPS = 12
  * A protocol `mouseMoved` is trusted, and the move is sent twice because menus
  * that already saw a pointer enter sometimes wait for it to actually move.
  */
-async function dispatchHover(tabId: number, call: ToolCall, signal?: AbortSignal): Promise<ToolAnswer> {
+async function dispatchHover(tabId: number, call: ToolCall, signal?: AbortSignal, commitAction?: () => void): Promise<ToolAnswer> {
   if (isCancelled(call, signal)) return cancelled()
   const point = await resolvePoint(tabId, call.args)
   if (isToolAnswer(point)) return point
@@ -919,7 +1159,7 @@ async function dispatchHover(tabId: number, call: ToolCall, signal?: AbortSignal
         text: `Rested the pointer on ${point.label} and waited ${HOVER_SETTLE_MS}ms. Whatever the page reveals on hover should be on screen now; call browser_snapshot to read it, or browser_wait if it is still loading.`,
       },
     }
-  })
+  }, () => undefined, commitAction)
 }
 
 /**
@@ -930,7 +1170,7 @@ async function dispatchHover(tabId: number, call: ToolCall, signal?: AbortSignal
  * would see the pointer teleport, if it saw a move at all. Interpolating the
  * path is what makes the gesture look like a hand to the page.
  */
-async function dispatchDrag(tabId: number, call: ToolCall, signal?: AbortSignal): Promise<ToolAnswer> {
+async function dispatchDrag(tabId: number, call: ToolCall, signal?: AbortSignal, commitAction?: () => void): Promise<ToolAnswer> {
   if (isCancelled(call, signal)) return cancelled()
   const from = await resolvePoint(tabId, { index: call.args.fromIndex, x: call.args.fromX, y: call.args.fromY })
   if (isToolAnswer(from)) return from
@@ -961,7 +1201,106 @@ async function dispatchDrag(tabId: number, call: ToolCall, signal?: AbortSignal)
         text: `Dragged from ${from.label} to ${to.label} in ${steps} steps. Call browser_snapshot to see where things landed.`,
       },
     }
-  })
+  }, () => undefined, commitAction)
+}
+
+/**
+ * Respond to an active native JavaScript dialog (alert, confirm, prompt, beforeunload) on a tab.
+ */
+async function dispatchDialog(
+  tabId: number,
+  call: ToolCall,
+  signal?: AbortSignal,
+  commitAction?: () => void,
+  rollbackActionCommit?: () => void,
+): Promise<ToolAnswer> {
+  if (isCancelled(call, signal)) return cancelled()
+  const action = call.args.action
+  if (action !== 'accept' && action !== 'dismiss') {
+    return { ok: false, error: { code: 'action-failed', message: 'action must be "accept" or "dismiss".' } }
+  }
+
+  const pending = pendingDialogsByTab.get(tabId)
+  if (pending === undefined) {
+    if (timedOutDialogsByTab.has(tabId)) {
+      return unavailable(
+        `The native JavaScript dialog timed out after ${Math.round(dialogHoldTimeoutMs / 1000)}s and can no longer be answered. The tab is frozen; use browser_reload to recover.`,
+      )
+    }
+    return unavailable('There is no active native dialog on this tab.')
+  }
+
+  const accept = action === 'accept'
+  const promptText = typeof call.args.promptText === 'string' ? call.args.promptText : undefined
+  const cdpParams: { accept: boolean; promptText?: string } = { accept }
+  if (promptText !== undefined) {
+    cdpParams.promptText = promptText
+  } else if (pending.type === 'prompt' && accept) {
+    cdpParams.promptText = pending.defaultPrompt ?? ''
+  }
+
+  try {
+    await chrome.debugger.sendCommand(pending.debuggee, 'Page.handleJavaScriptDialog', cdpParams)
+  } catch (error: unknown) {
+    const detail = error instanceof Error ? error.message : String(error)
+    return unavailable(`Failed to handle dialog: ${detail}`)
+  }
+
+  if (pending.resolveTimeout) clearTimeout(pending.resolveTimeout)
+  pendingDialogsByTab.delete(tabId)
+  timedOutDialogsByTab.delete(tabId)
+  resetTabSnapshot(tabId)
+  try {
+    await chrome.debugger.detach(pending.debuggee)
+  } catch {
+    // Already detached
+  }
+
+  if (pending.type === 'beforeunload') {
+    if (accept) {
+      commitAction?.()
+    } else {
+      rollbackActionCommit?.()
+      resetTabSnapshot(tabId)
+    }
+  } else if (pending.type === 'alert') {
+    commitAction?.()
+  } else {
+    if (accept) {
+      commitAction?.()
+    } else {
+      rollbackActionCommit?.()
+    }
+  }
+
+  let text: string
+  switch (pending.type) {
+    case 'confirm':
+      text = `Dialog confirm("${pending.message}") was ${accept ? 'accepted' : 'dismissed'}.`
+      break
+    case 'prompt':
+      if (accept) {
+        const submitted = promptText ?? pending.defaultPrompt ?? ''
+        text = `Dialog prompt("${pending.message}") was submitted with text "${submitted}".`
+      } else {
+        text = `Dialog prompt("${pending.message}") was dismissed.`
+      }
+      break
+    case 'alert':
+      text = `Dialog alert("${pending.message}") was dismissed.`
+      break
+    case 'beforeunload':
+      text = `Dialog beforeunload("${pending.message}") was ${accept ? 'accepted' : 'dismissed'}.`
+      break
+    default:
+      text = `Dialog ${pending.type}("${pending.message}") was ${accept ? 'accepted' : 'dismissed'}.`
+      break
+  }
+
+  return {
+    ok: true,
+    result: { text },
+  }
 }
 
 /** One step of a batch, after the raw `actions` array has been validated. */
@@ -1045,6 +1384,9 @@ async function dispatchBatch(
     if (answer.ok) {
       completed += 1
       lines.push(`${number}. ${step.tool}: ${answerText(answer) ?? 'done'}`)
+      if (tab.id !== undefined && pendingDialogsByTab.has(tab.id)) {
+        break
+      }
       continue
     }
     failedAt = number
@@ -1055,7 +1397,7 @@ async function dispatchBatch(
     ? `Ran ${completed} action${completed === 1 ? '' : 's'} in a row.`
     : `Ran ${completed} of ${parsed.length} actions; step ${failedAt} failed${stopOnError ? ', so the later steps were skipped' : ''}.`
   const parts = [headline, ...lines]
-  if (call.args.snapshot === true && failedAt === undefined) {
+  if (call.args.snapshot === true && failedAt === undefined && (tab.id === undefined || !pendingDialogsByTab.has(tab.id))) {
     try {
       const snapshot = await dispatchToolCallUnlocked(
         { ...call, name: 'browser_snapshot', args: {} },
@@ -1638,6 +1980,26 @@ async function dispatchToolCallUnlocked(
     return { ok: false, error: { code: 'no-active-tab', message: 'No active tab is available for browser operations.' } }
   }
   if (targetStillAllowed?.() === false) return targetChanged()
+
+  if (pendingDialogsByTab.has(tab.id)) {
+    if (call.name !== 'browser_dialog' && call.name !== 'browser_reload') {
+      const pending = pendingDialogsByTab.get(tab.id)!
+      return unavailable(formatDialogOpeningWarning(pending))
+    }
+  }
+  if (timedOutDialogsByTab.has(tab.id)) {
+    if (call.name !== 'browser_reload') {
+      return unavailable(
+        `The native JavaScript dialog timed out after ${Math.round(dialogHoldTimeoutMs / 1000)}s and remains open. The tab is frozen. The only recovery option is browser_reload.`,
+      )
+    }
+  }
+
+  if (call.name === 'browser_reload' && (pendingDialogsByTab.has(tab.id) || timedOutDialogsByTab.has(tab.id))) {
+    return await dispatchTabNativeTool(tab.id, tab.url, tab.title, tab.windowId, call, effectiveBudget, signal, targetStillAllowed, tabManagement.commitAction)
+      ?? unavailable('The current page DOM is protected by the browser.')
+  }
+
   const frames = await listTabFrames(tab.id, tab.url)
   if (isCancelled(call, signal)) return cancelled()
   if (targetStillAllowed?.() === false) return targetChanged()
@@ -1647,7 +2009,7 @@ async function dispatchToolCallUnlocked(
   }
   const frameError = validateFrameTarget(call, frames)
   if (frameError !== undefined) return frameError
-  if (!isInjectablePage(tab.url) && !TAB_NATIVE_TOOLS.has(call.name)) {
+  if (!isInjectablePage(tab.url) && !TAB_NATIVE_TOOLS.has(call.name) && call.name !== 'browser_dialog') {
     return unavailable('The current page DOM is protected by the browser. Only snapshot metadata, navigate, back, forward, and reload are available on this page.')
   }
   const targetError = validateElementTarget(call, tab.id, frames)
@@ -1693,18 +2055,21 @@ async function dispatchToolCallUnlocked(
   // Script execution rides the DevTools protocol, so it bypasses the page's own
   // CSP and the content script entirely.
   if (call.name === 'browser_eval') {
-    return await dispatchEval(tab.id, call, signal)
+    return await dispatchEval(tab.id, call, signal, tabManagement.commitAction)
+  }
+  if (call.name === 'browser_dialog') {
+    return await dispatchDialog(tab.id, call, signal, tabManagement.commitAction, tabManagement.rollbackActionCommit)
   }
   // Clicks at a point, hovers, and drags all need trusted input, which only the
   // debugger can produce.
   if (call.name === 'browser_click_at') {
-    return await dispatchClickAt(tab.id, call, signal)
+    return await dispatchClickAt(tab.id, call, signal, tabManagement.commitAction)
   }
   if (call.name === 'browser_hover') {
-    return await dispatchHover(tab.id, call, signal)
+    return await dispatchHover(tab.id, call, signal, tabManagement.commitAction)
   }
   if (call.name === 'browser_drag') {
-    return await dispatchDrag(tab.id, call, signal)
+    return await dispatchDrag(tab.id, call, signal, tabManagement.commitAction)
   }
   if (call.name === 'browser_batch') {
     return await dispatchBatch(
@@ -1719,6 +2084,9 @@ async function dispatchToolCallUnlocked(
     )
   }
   if (!isInjectablePage(tab.url)) {
+    if (call.name === 'browser_dialog') {
+      return await dispatchDialog(tab.id, call, signal, tabManagement.commitAction, tabManagement.rollbackActionCommit)
+    }
     return await dispatchTabNativeTool(tab.id, tab.url, tab.title, tab.windowId, call, effectiveBudget, signal, targetStillAllowed, tabManagement.commitAction)
       ?? unavailable('The current page DOM is protected by the browser.')
   }

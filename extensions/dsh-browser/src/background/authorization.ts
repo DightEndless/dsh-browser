@@ -12,6 +12,7 @@ const STATE_CHANGING_ACTIONS = new Set([
   'browser_press',
   'browser_upload',
   'browser_eval',
+  'browser_dialog',
   'browser_click_at',
   'browser_hover',
   'browser_drag',
@@ -177,6 +178,16 @@ function summarizeAction(call: ToolCall, locale: UiLocale): string {
       `Run this script in the page: ${safeInline(typeof call.args.expression === 'string' ? call.args.expression : '?')}`,
       `在页面中执行这段脚本：${safeInline(typeof call.args.expression === 'string' ? call.args.expression : '?')}`,
     )
+    case 'browser_dialog': {
+      const action = call.args.action === 'accept' ? 'accept' : 'dismiss'
+      const promptText = typeof call.args.promptText === 'string' ? ` with text “${safeInline(call.args.promptText)}”` : ''
+      const promptTextZh = typeof call.args.promptText === 'string' ? `并输入「${safeInline(call.args.promptText)}」` : ''
+      return localized(
+        locale,
+        `${action === 'accept' ? 'Accept' : 'Dismiss'} the active native JavaScript dialog${promptText}`,
+        `${action === 'accept' ? '确认' : '取消'}当前原生对话框${promptTextZh}`,
+      )
+    }
     case 'browser_click_at': {
       const across = typeof call.args.x === 'number' ? Math.round(call.args.x * 100) : '?'
       const down = typeof call.args.y === 'number' ? Math.round(call.args.y * 100) : '?'
