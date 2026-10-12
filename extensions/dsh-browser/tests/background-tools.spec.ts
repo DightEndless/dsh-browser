@@ -121,8 +121,9 @@ function mockChrome(options: {
     }
   })
   const permissionsContains = vi.fn(async () => options.debuggerGranted !== false)
+  const create = vi.fn(async (props?: chrome.tabs.CreateProperties) => ({ id: 999, windowId: 1, ...props }))
   vi.stubGlobal('chrome', {
-    tabs: { query, get, sendMessage, update, goBack, goForward, reload, remove, captureVisibleTab },
+    tabs: { query, get, sendMessage, update, goBack, goForward, reload, remove, captureVisibleTab, create },
     scripting: { executeScript },
     webNavigation: { getAllFrames },
     debugger: { attach: debuggerAttach, detach: debuggerDetach, sendCommand: debuggerSendCommand },
@@ -144,6 +145,7 @@ function mockChrome(options: {
     }
   }
   return {
+    create,
     debuggerAttach,
     debuggerDetach,
     debuggerSendCommand,
@@ -171,6 +173,7 @@ afterEach(() => {
 describe('isNavigationCandidateTool', () => {
   it('classifies only tools that may change the page checkpoint', () => {
     expect(isNavigationCandidateTool('browser_click')).toBe(true)
+    expect(isNavigationCandidateTool('browser_click_at')).toBe(true)
     expect(isNavigationCandidateTool('browser_navigate')).toBe(true)
     expect(isNavigationCandidateTool('browser_open_tab')).toBe(true)
     expect(isNavigationCandidateTool('browser_snapshot')).toBe(false)
@@ -1796,5 +1799,28 @@ describe('dispatchOpenTab', () => {
     const text = (answer.result as { text: string }).text
     expect(text).toContain('Page state was not captured')
     expect(text).not.toContain('Page state after the batch:')
+  })
+
+  it('preserves tab count and never invokes chrome.tabs.create on browser_click (H10)', async () => {
+    const chromeMock = mockChrome({
+      tab: { id: 70, url: 'https://example.com/' },
+      respond: (message) => (message as { action?: string }).action === 'browser_snapshot'
+        ? { ok: true, result: { text: '1. [1] Learn more' } }
+        : {
+            ok: true,
+            result: { text: 'Clicked link [1]. Call browser_snapshot again after navigation settles.', navigationPending: true },
+          },
+    })
+    await dispatchToolCall(CALL, 'auto')
+    chromeMock.create.mockClear()
+
+    const clickAnswer = await dispatchToolCall(
+      { id: 'click-h10', name: 'browser_click', args: { index: 1 } },
+      'ask',
+      undefined,
+      async () => 'approved',
+    )
+    expect(clickAnswer.ok).toBe(true)
+    expect(chromeMock.create).not.toHaveBeenCalled()
   })
 })

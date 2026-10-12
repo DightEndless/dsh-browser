@@ -60,6 +60,7 @@ const ACTION_DELTA_TOOLS = new Set([
 const ACTION_DELTA_GUIDANCE = 'The page settled and its current changes are included below. Continue from this state; take another snapshot only when broader page context is needed.'
 const NAVIGATION_CANDIDATE_TOOLS = new Set([
   'browser_click',
+  'browser_click_at',
   'browser_navigate',
   'browser_back',
   'browser_forward',
@@ -269,6 +270,12 @@ async function sendAction(
 
 function contentScriptReceiverMissing(error: unknown): boolean {
   return error instanceof Error && error.message.includes('Receiving end does not exist')
+}
+
+function isChannelClosedError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false
+  const msg = error.message.toLowerCase()
+  return msg.includes('message port closed') || msg.includes('message channel closed')
 }
 
 function unavailable(message: string): ToolAnswer {
@@ -1649,6 +1656,7 @@ async function dispatchOnce(
   includeActionDelta: boolean = false,
   commitAction?: () => void,
   rollbackActionCommit?: () => void,
+  inBatch: boolean = false,
 ): Promise<ToolAnswer> {
   if (isCancelled(call, signal)) return cancelled()
   if (targetStillAllowed?.() === false) return targetChanged()
@@ -1669,7 +1677,8 @@ async function dispatchOnce(
   if (targetStillAllowed?.() === false) return targetChanged()
   const hasSnapshotBaseline = snapshotDocumentsByTab.get(tabId)?.get(frameId) === frameDocumentKey(frame)
   const requestPageDelta = includeActionDelta && hasSnapshotBaseline && ACTION_DELTA_TOOLS.has(call.name)
-  const navigationWait = includeActionDelta && isNavigationCandidateTool(call.name)
+  const awaitNavigation = isNavigationCandidateTool(call.name) && (includeActionDelta || inBatch)
+  const navigationWait = awaitNavigation
     ? waitForNextDocumentReady(tabId, frameId, frame.documentId, signal)
     : undefined
   let response: unknown
@@ -1684,6 +1693,27 @@ async function dispatchOnce(
       requestPageDelta,
     )
   } catch (error: unknown) {
+    if (navigationWait !== undefined && isChannelClosedError(error)) {
+      const ready = await navigationWait.ready
+      if (ready) {
+        resetTabSnapshot(tabId)
+        if (isCancelled(call, signal)) return cancelled()
+        if (targetStillAllowed?.() === false) return targetChanged()
+        const text = `Clicked [${call.args.index ?? 'element'}].`
+        if (includeActionDelta) {
+          try {
+            const snapshot = await snapshotAfterNavigation(tabId, call, text, budget, targetStillAllowed)
+            if (snapshot !== undefined) return snapshot
+          } catch {
+            // Keep the successful click text when opportunistic snapshot fails
+          }
+        }
+        return {
+          ok: true,
+          result: { text: `${text} Navigation completed.` },
+        }
+      }
+    }
     if (stateChanging && contentScriptReceiverMissing(error)) rollbackActionCommit?.()
     navigationWait?.cancel()
     throw error
@@ -1701,17 +1731,20 @@ async function dispatchOnce(
     navigationWait?.cancel()
     return response
   }
-  if (answerNavigationPending(response) && navigationWait !== undefined) {
-    const ready = await navigationWait.ready
-    if (isCancelled(call, signal)) return cancelled()
-    if (targetStillAllowed?.() === false) return targetChanged()
-    if (ready) {
-      try {
-        const snapshot = await snapshotAfterNavigation(tabId, call, text, budget, targetStillAllowed)
-        if (snapshot !== undefined) return snapshot
-      } catch {
-        // Preserve the successful navigation status when the replacement page
-        // becomes unavailable before its opportunistic snapshot completes.
+  if (answerNavigationPending(response)) {
+    resetTabSnapshot(tabId)
+    if (navigationWait !== undefined) {
+      const ready = await navigationWait.ready
+      if (isCancelled(call, signal)) return cancelled()
+      if (targetStillAllowed?.() === false) return targetChanged()
+      if (ready && includeActionDelta) {
+        try {
+          const snapshot = await snapshotAfterNavigation(tabId, call, text, budget, targetStillAllowed)
+          if (snapshot !== undefined) return snapshot
+        } catch {
+          // Preserve the successful navigation status when the replacement page
+          // becomes unavailable before its opportunistic snapshot completes.
+        }
       }
     }
   } else {
@@ -2101,6 +2134,7 @@ async function dispatchToolCallUnlocked(
       includeActionDelta,
       tabManagement.commitAction,
       tabManagement.rollbackActionCommit,
+      tabManagement.suppressActionDelta === true,
     )
   } catch (error: unknown) {
     if (isCancelled(call, signal)) return cancelled()
@@ -2170,6 +2204,7 @@ async function dispatchToolCallUnlocked(
         includeActionDelta,
         tabManagement.commitAction,
         tabManagement.rollbackActionCommit,
+        tabManagement.suppressActionDelta === true,
       )
     } catch {
       return unavailable('The content script did not answer after it was loaded. Call browser_snapshot again before retrying.')

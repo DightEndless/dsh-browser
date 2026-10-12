@@ -261,10 +261,11 @@ async function clickAction(args: Record<string, unknown>, ctx: ActionContext): P
   const index = numberArg(args, 'index')
   const el = elementOrThrow(ctx.ids, index)
   el.scrollIntoView({ block: 'center', behavior: 'instant' })
-  if (el instanceof HTMLAnchorElement) {
-    const rawHref = el.getAttribute('href')?.trim().toLowerCase() ?? ''
+  const anchor = el instanceof HTMLAnchorElement ? el : (el.closest('a[href]') as HTMLAnchorElement | null)
+  if (anchor !== null) {
+    const rawHref = anchor.getAttribute('href')?.trim().toLowerCase() ?? ''
     if (rawHref.startsWith('javascript:') && mainWorldClickReady()) {
-      clickFromMainWorld(el)
+      clickFromMainWorld(anchor)
       // Answer before the activation can start a navigation. Awaiting a settle
       // here lets the frame's context disappear with the response still in
       // flight, which the caller reports as a timeout even though the click
@@ -273,12 +274,12 @@ async function clickAction(args: Record<string, unknown>, ctx: ActionContext): P
         text: `Clicked link [${index}] in the page's main world. Call browser_snapshot again after the page settles.`,
       }
     }
-    const target = el.target.trim().toLowerCase()
+    const target = anchor.target.trim().toLowerCase()
     const sameFrameTarget = target === '' || target === '_self'
     let href: URL | undefined
-    try { href = new URL(el.href) } catch { /* let the native click handle unusual links */ }
+    try { href = new URL(anchor.href) } catch { /* let the native click handle unusual links */ }
     const controlledNavigation = sameFrameTarget
-      && !el.hasAttribute('download')
+      && !anchor.hasAttribute('download')
       && (href?.protocol === 'http:' || href?.protocol === 'https:')
     if (controlledNavigation && href !== undefined) {
       // Manual location assignment cannot preserve browser-managed link
@@ -286,20 +287,20 @@ async function clickAction(args: Record<string, unknown>, ctx: ActionContext): P
       // attribution registration. Keep native activation for those links,
       // but do not claim a replacement document is guaranteed: an SPA may
       // still cancel the click and remain in this document.
-      const hasReferrerPolicy = typeof el.referrerPolicy === 'string' && el.referrerPolicy !== ''
-      const requiresNativeActivation = el.relList.contains('noreferrer')
+      const hasReferrerPolicy = typeof anchor.referrerPolicy === 'string' && anchor.referrerPolicy !== ''
+      const requiresNativeActivation = anchor.relList.contains('noreferrer')
         || hasReferrerPolicy
-        || el.hasAttribute('ping')
-        || el.hasAttribute('attributionsrc')
+        || anchor.hasAttribute('ping')
+        || anchor.hasAttribute('attributionsrc')
       if (requiresNativeActivation) {
-        setTimeout(() => { el.click() }, 0)
+        setTimeout(() => { anchor.click() }, 0)
         return {
           text: `Clicked link [${index}] using native browser activation. Call browser_snapshot to read the resulting state.`,
         }
       }
       // Dispatch the click handlers without its default navigation so a
       // client-side router can cancel synchronously and keep this document.
-      const shouldNavigate = el.dispatchEvent(new MouseEvent('click', {
+      const shouldNavigate = anchor.dispatchEvent(new MouseEvent('click', {
         bubbles: true,
         cancelable: true,
         composed: true,
@@ -318,13 +319,14 @@ async function clickAction(args: Record<string, unknown>, ctx: ActionContext): P
       }
       // A cross-document navigation can unload this content script before an
       // awaited response. Answer first and navigate in the next task.
+      resetDeltaState()
       setTimeout(() => { location.href = href.href }, 0)
       return {
         text: `Clicked link [${index}]. Call browser_snapshot again after navigation settles.`,
         navigationPending: true,
       }
     }
-    setTimeout(() => { el.click() }, 0)
+    setTimeout(() => { anchor.click() }, 0)
     return { text: `Clicked link [${index}]. The link may open outside the controlled frame.` }
   }
   if (el instanceof HTMLButtonElement && el.disabled) {
