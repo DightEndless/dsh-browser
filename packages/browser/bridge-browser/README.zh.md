@@ -49,7 +49,7 @@ cd ~/.dsh/dsh-browser && pnpm start
 dsh plugin --profile web add @dightendless/dsh-bridge-browser
 ```
 
-这个名字会从 npm 解析到预构建包（手动管理 profile 就是 `npm i @dightendless/dsh-bridge-browser`）；同样的字节也以 tgz 形式挂在 [v0.3.4 发行页](https://github.com/DightEndless/dsh-browser/releases/tag/v0.3.4) 上，供离线安装。
+这个名字会从 npm 解析到预构建包（手动管理 profile 就是 `npm i @dightendless/dsh-bridge-browser`）；同样的字节也以 tgz 形式挂在 [v0.3.5 发行页](https://github.com/DightEndless/dsh-browser/releases/tag/v0.3.5) 上，供离线安装。
 
 Windows 请改用 PowerShell 安装器：
 

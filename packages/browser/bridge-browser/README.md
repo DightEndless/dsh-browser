@@ -49,7 +49,7 @@ To skip the build, install the published package instead:
 dsh plugin --profile web add @dightendless/dsh-bridge-browser
 ```
 
-That name resolves to the prebuilt package on npm (`npm i @dightendless/dsh-bridge-browser` if you manage the profile by hand); the same bytes are attached to the [v0.3.4 release](https://github.com/DightEndless/dsh-browser/releases/tag/v0.3.4) as a tarball for offline installs.
+That name resolves to the prebuilt package on npm (`npm i @dightendless/dsh-bridge-browser` if you manage the profile by hand); the same bytes are attached to the [v0.3.5 release](https://github.com/DightEndless/dsh-browser/releases/tag/v0.3.5) as a tarball for offline installs.
 
 On Windows, run the PowerShell installer instead:
 

@@ -2,7 +2,7 @@
   "name": "dsh-browser",
   "version": "0.1.4",
   "description": "Standalone dsh browser bridge and controlled-tab Chrome/Firefox extension workspace",
-  "author": "Yuxiang Lin",
+  "author": "DightEndless",
   "license": "MIT",
   "private": true,
   "packageManager": "pnpm@11.7.0",

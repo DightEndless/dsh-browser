@@ -10,6 +10,30 @@ change:
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 0.3.5 — 2026-10-12
+
+### Fixed
+
+- **The package metadata named someone else as the author.** All three manifests inherited
+  `"author": "Yuxiang Lin"` from the upstream workspace this project was forked from. That
+  string is not cosmetic: it is what npm renders on the package page, and it is what every
+  catalog that reads the manifest — the plugin entry on deepseek.stream, among others —
+  displays next to the plugin. Anyone who found the plugin through a listing was told it was
+  written by a person who has nothing to do with it. The field now reads `DightEndless` in
+  the bridge package, the extension package, and the workspace root.
+  - `LICENSE` is deliberately untouched. It is the upstream MIT copyright line, and the fork
+    has no standing to reassign it; the license text stays as the license requires.
+  - The npm package page only picks this up on the next publish, and a catalog entry only on
+    its next edit or re-submission — a manifest field is a snapshot, not a live reference.
+
+### Notes
+
+- No runtime change whatsoever: one metadata string, in three manifests, and a version bump.
+  The extension bytes are unchanged and the plugin code is unchanged, so this release exists
+  only to correct what a package page and a catalog listing say about who wrote it.
+- Worth recording as a general lesson: a fork inherits its metadata as silently as its code.
+  Everything in a published manifest is a user-visible claim, and `author` is the one nobody
+  re-reads after the first `package.json` is copied.
 ## 0.3.4 — 2026-10-11
 
 ### Added
