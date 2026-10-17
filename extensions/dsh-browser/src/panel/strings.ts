@@ -62,6 +62,8 @@ export interface PanelCopy {
     back: string
     eyebrow: string
     title: string
+    advanced: string
+    advancedHelp: string
     bridgeAddress: string
     bridgeHelp: string
     bridgePlaceholder: string
@@ -296,9 +298,11 @@ const EN: PanelCopy = {
     back: 'Back to chat',
     eyebrow: 'Browser assistant',
     title: 'Settings',
+    advanced: 'Advanced',
+    advancedHelp: 'Only needed for a remote host or when troubleshooting',
     bridgeAddress: 'Bridge address',
-    bridgeHelp: 'Leave blank to detect a local service automatically',
-    bridgePlaceholder: 'Auto-detect 3080 / 3081 / 3090 / 14389 / 43189',
+    bridgeHelp: 'Leave blank: the plugin is found automatically',
+    bridgePlaceholder: 'Auto-detect',
     tokenHelp: 'Required by Firefox and remote deployments',
     tokenPlaceholder: 'Required for Firefox / remote deployments',
     pageSharing: 'Page content sharing',
@@ -530,9 +534,11 @@ const ZH: PanelCopy = {
     back: '返回对话',
     eyebrow: '浏览器助手',
     title: '设置',
+    advanced: '高级',
+    advancedHelp: '仅在远程部署或排查问题时需要',
     bridgeAddress: '桥地址',
-    bridgeHelp: '留空时自动检测本机服务',
-    bridgePlaceholder: '自动检测 3080 / 3081 / 3090 / 14389 / 43189',
+    bridgeHelp: '留空即可，插件会被自动找到',
+    bridgePlaceholder: '自动检测',
     tokenHelp: 'Firefox 和远程部署需要填写',
     tokenPlaceholder: 'Firefox / 远程部署时填写',
     pageSharing: '页面内容共享',

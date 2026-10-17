@@ -111,30 +111,60 @@ const SETTINGS_DEFAULTS: Settings = {
 }
 
 /**
- * 自动探测的候选端口：
- * - dsh web（CLI）默认 3080，端口被占时依次回退 3081 / 3090；
- * - DSH Desktop 默认由系统随机分配本地 Web 端口（`dsh-desktop.port: 0`），
- *   用户指南推荐固定为 43189（见 deepseek-harness-desktop docs/user-guide）；
- * - 14389 为历史桌面应用端口，保留兼容旧版。
+ * 已知的固定端口，按顺序探测：
+ * - 30789/30790/30791：bridge 插件自己绑定的发现端口（见 discovery-beacon.ts），
+ *   直接返回当前真实的 wsUrl——桌面版每次换端口也能一次命中；
+ * - 3080/3081/3090：dsh web（CLI）默认端口，被占用时依次回退；
+ * - 14389/43189：历史与推荐固定端口，保留兼容。
+ *
+ * 发现端口放在最前面，所以 DSH Desktop 一次请求就能连上，不再需要扫端口。
  */
-const DISCOVERY_PORTS = [3080, 3081, 3090, 14389, 43189]
+const DISCOVERY_PORTS = [30789, 30790, 30791, 3080, 3081, 3090, 14389, 43189]
 const LEGACY_LOCAL_URL = 'ws://127.0.0.1:3080'
 
-/** 探测本机 dsh 的桥地址：fetch /ext/bridge-config 直到成功。 */
+/** 读一个端口的 `{ wsUrl }`；不是 dsh 桥就返回 undefined。 */
+async function readBridgeConfig(port: number, timeoutMs: number): Promise<string | undefined> {
+  try {
+    const response = await fetch(`http://127.0.0.1:${port}/ext/bridge-config`, {
+      signal: AbortSignal.timeout(timeoutMs),
+    })
+    if (!response.ok) return undefined
+    const body = await response.json() as { wsUrl?: unknown }
+    return typeof body.wsUrl === 'string' && body.wsUrl.startsWith('ws://') ? body.wsUrl : undefined
+  } catch {
+    // 该端口没有监听、属于别的服务，或不是 dsh 桥。
+    return undefined
+  }
+}
+
+/**
+ * 探测本机 dsh 的桥地址。
+ *
+ * 顺序：上次成功的端口 → 发现端口（插件固定绑定）→ 已知固定端口。
+ * 地址留空即自动探测，用户不需要手填，DSH 重启换了端口也能跟上。
+ *
+ * 这里不做端口段扫描：插件已经占住固定端口主动应答，扫描既没必要，也容易
+ * 被安全软件当成端口扫描行为。
+ */
 async function discoverBridge(shouldContinue: () => boolean = () => true): Promise<string | undefined> {
+  // 1) 上次成功的端口：DSH 没重启时一次请求命中。
+  const remembered = lastBridgePort
+  if (remembered !== undefined) {
+    const url = await readBridgeConfig(remembered, 1_500)
+    if (url !== undefined) return url
+  }
+
+  // 2) 固定端口（含插件自己的发现端口），逐个试。
   for (const port of DISCOVERY_PORTS) {
     if (!shouldContinue()) return undefined
+    if (port === remembered) continue
+    const url = await readBridgeConfig(port, 1_500)
+    if (url === undefined) continue
     try {
-      const response = await fetch(`http://127.0.0.1:${port}/ext/bridge-config`, {
-        signal: AbortSignal.timeout(1_500),
-      })
-      if (!shouldContinue()) return undefined
-      if (!response.ok) continue
-      const body = await response.json() as { wsUrl?: unknown }
-      if (typeof body.wsUrl === 'string' && body.wsUrl.startsWith('ws://')) return body.wsUrl
-    } catch {
-      // 该端口没有 dsh 或未挂桥：试下一个。
-    }
+      lastBridgePort = Number(new URL(url).port)
+      void chrome.storage.local.set({ [LAST_PORT_KEY]: lastBridgePort }).catch(() => {})
+    } catch { /* 地址不可解析时下次照常重新发现 */ }
+    return url
   }
   return undefined
 }
@@ -165,6 +195,14 @@ type StoredTabAffinity =
   | { lost: true; sessionTabs?: Record<string, AffinityTab>; focusedSessionId?: string }
 
 let settings: Settings = { ...SETTINGS_DEFAULTS }
+/**
+ * Port that answered last time, so a DSH restart only costs one probe.
+ * Restored from `chrome.storage.session` on boot; that store survives service
+ * worker restarts but not a browser restart, which is the right scope: after a
+ * browser restart the port may legitimately differ.
+ */
+let lastBridgePort: number | undefined
+const LAST_PORT_KEY = 'lastBridgePort'
 let unrestrictedAccessActive = SETTINGS_DEFAULTS.unrestrictedBrowserAccess
 let unrestrictedAccessRevision = 0
 let unrestrictedRevocation: Promise<void> | undefined
@@ -256,7 +294,11 @@ function abortable<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
 }
 
 async function loadSettings(): Promise<Settings> {
-  const stored = await chrome.storage.local.get(STORAGE_KEY)
+  const stored = await chrome.storage.local.get([STORAGE_KEY, LAST_PORT_KEY])
+  const remembered = stored[LAST_PORT_KEY] as unknown
+  if (typeof remembered === 'number' && Number.isInteger(remembered) && remembered > 0 && remembered < 65_536) {
+    lastBridgePort = remembered
+  }
   const loaded = normalizeSettings({ ...SETTINGS_DEFAULTS, ...(stored[STORAGE_KEY] as Partial<Settings> | undefined) })
   if (loaded.bridgeUrl === LEGACY_LOCAL_URL || loaded.bridgeUrl === `${LEGACY_LOCAL_URL}/`) {
     loaded.bridgeUrl = ''

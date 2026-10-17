@@ -124,6 +124,9 @@ describe('extension ↔ migrated bridge smoke', () => {
     await panel.waitForSelector('header.topbar', { timeout: 15_000 })
 
     await panel.click('button[aria-label="打开设置"]')
+    // The bridge address lives under Advanced now: loopback discovery needs no
+    // manual URL, so the field stays collapsed until someone overrides it.
+    await panel.click('details.settings-advanced > summary')
     await panel.fill('input[placeholder*="自动检测"]', `ws://127.0.0.1:${String(port)}`)
     await panel.fill('input[type="password"]', TOKEN)
     await panel.click('text=保存并连接')

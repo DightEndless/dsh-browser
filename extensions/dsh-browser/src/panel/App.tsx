@@ -1945,6 +1945,27 @@ export function App(): React.JSX.Element {
         <UpdateCard copy={copy.update} />
         <div className="settings-panel">
           <label>
+            <span>{copy.settings.pageSharing}</span>
+            <small>{copy.settings.pageSharingHelp}</small>
+            <select
+              value={settings?.sharePageContent ?? 'auto'}
+              disabled={settings?.unrestrictedBrowserAccess ?? false}
+              onChange={(e) => setSettings((prev) => prev === null ? prev : { ...prev, sharePageContent: e.target.value as PanelSettings['sharePageContent'] })}
+            >
+              <option value="auto">{copy.settings.sharingAuto}</option>
+              <option value="ask">{copy.settings.sharingAsk}</option>
+              <option value="off">{copy.settings.sharingOff}</option>
+            </select>
+          </label>
+        </div>
+        {/* 桥地址与 Token 平时不需要动：桥由插件自动发现，本机连接免 token。
+            收进 <details> 免得占用主设置页，只有远程部署或排障时才展开。 */}
+        <details className="settings-panel settings-advanced">
+          <summary>
+            <span>{copy.settings.advanced}</span>
+            <small>{copy.settings.advancedHelp}</small>
+          </summary>
+          <label>
             <span>{copy.settings.bridgeAddress}</span>
             <small>{copy.settings.bridgeHelp}</small>
             <input
@@ -1963,20 +1984,7 @@ export function App(): React.JSX.Element {
               placeholder={copy.settings.tokenPlaceholder}
             />
           </label>
-          <label>
-            <span>{copy.settings.pageSharing}</span>
-            <small>{copy.settings.pageSharingHelp}</small>
-            <select
-              value={settings?.sharePageContent ?? 'auto'}
-              disabled={settings?.unrestrictedBrowserAccess ?? false}
-              onChange={(e) => setSettings((prev) => prev === null ? prev : { ...prev, sharePageContent: e.target.value as PanelSettings['sharePageContent'] })}
-            >
-              <option value="auto">{copy.settings.sharingAuto}</option>
-              <option value="ask">{copy.settings.sharingAsk}</option>
-              <option value="off">{copy.settings.sharingOff}</option>
-            </select>
-          </label>
-        </div>
+        </details>
         <div className="settings-panel preference-toggles">
           <label className="setting-toggle">
             <span className="setting-toggle-copy">

@@ -20,7 +20,7 @@ window.__ModuleLoader__.load({
     const dictionaries = {
       zh: {
         'bridgeAddress.title': '浏览器桥地址',
-        'bridgeAddress.help': '粘贴到 Chrome 扩展「桥地址」设置；本机一般无需 Token。',
+        'bridgeAddress.help': '仅供排查或远程部署时参考：扩展会自动找到桥，本机一般无需 Token。',
         'bridgeAddress.copy': '复制',
         'bridgeAddress.copied': '已复制',
         'bridgeAddress.loading': '正在读取…',
@@ -41,7 +41,7 @@ window.__ModuleLoader__.load({
       },
       en: {
         'bridgeAddress.title': 'Browser bridge address',
-        'bridgeAddress.help': 'Paste into the Chrome extension Bridge address setting. Loopback needs no token.',
+        'bridgeAddress.help': 'For troubleshooting or a remote host only: the extension finds the bridge automatically, and loopback needs no token.',
         'bridgeAddress.copy': 'Copy',
         'bridgeAddress.copied': 'Copied',
         'bridgeAddress.loading': 'Loading…',
@@ -293,10 +293,14 @@ window.__ModuleLoader__.load({
         () => ctx.locale.register(LOCALE_NS, dictionaries),
         'bridge-browser: settings dictionaries',
       )
-      ctx.slots.inject('settings.general.item', () => ctx.slots.register({
-        name: 'settings.general.item',
-        id: 'bridge-browser-address',
-        order: 100,
+      // Own settings tab. Everything this plugin needs to show (extension install,
+      // bridge address) belongs together rather than inside General settings,
+      // where it competed with unrelated rows.
+      ctx.slots.inject('settings.section', () => ctx.slots.register({
+        name: 'settings.section',
+        id: 'bridge-browser',
+        order: 40,
+        label: () => 'DSH 浏览器助手',
         locale: LOCALE_NS,
       }, BridgeAddressRow))
     }

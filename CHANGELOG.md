@@ -10,6 +10,56 @@ change:
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 0.3.6 — 2026-10-17
+
+### Fixed
+
+- **The bridge could not connect on dsh 0.2.1-rc.1 and later.** dsh 0.2.1 tightened the
+  `PeerScope` contract that `TypertGateway.wireStream.open` reads, and the bridge passed
+  `undefined` for the Peer. The socket still completed its handshake — `hello.ok` arrived —
+  and then the gateway-owned `$events` stream threw before delivering a single frame, so the
+  server closed with WS 1011 and the extension retried forever. In the side panel this looked
+  like a status that flickered between `connecting`, `connected`, and `reconnecting`, with an
+  empty Network tab in the service worker.
+  - Three separate reads now fail in order, which is why this took three fixes to clear:
+    `methodSignal` joins every stream's signal with `request.peer.signal`;
+    `requireInteractions` rejects a Peer whose `interactions` is not `'answer'`; and
+    `openRemoteEvents` stores `peer.principal` and reads `principal.kind`. The bridge supplies
+    a real in-process Peer that satisfies all three: an owner Principal, `interactions:
+    'answer'`, and a never-aborted signal so stream lifetime stays with the caller's own
+    cancellation.
+  - `0.3.5` has the same defect — the bug is in the code this release changes, not in the
+    runtime it happens to be running on. Upgrading along the old line would not have helped.
+- **The extension could not find the bridge after a DSH restart.** DSH Desktop assigns its web
+  port at random on every launch (`dsh-desktop.port: 0`), and the extension cannot read the
+  filesystem to learn the new one, so the only options were re-pasting the bridge URL by hand
+  or probing a wide port range. The plugin now binds a small fixed set of loopback ports
+  (30789-30791, first free one wins) and answers `/ext/bridge-config` on it with the live
+  WebSocket URL. The extension tries that address first, so discovery is one request instead
+  of a scan — which also removes the pattern that looks like port scanning to security
+  software.
+  - The host web port is still served at the same path, so a deployment that already knows
+    the port keeps working unchanged.
+- **Reconnecting to a stale port now costs one probe.** The extension remembers the port that
+  answered last time and tries it before anything else.
+
+### Changed
+
+- **The plugin has its own settings tab.** It used to inject a row into General settings,
+  where a plugin-specific install guide competed with unrelated host rows. It now registers a
+  `settings.section` and appears as `DSH 浏览器助手`.
+- **The extension hides the bridge address under Advanced.** Both the address and the token
+  exist for remote hosts and troubleshooting; on loopback the bridge is found automatically
+  and no token is needed. The old placeholder advertised a list of fixed ports that no longer
+  describes how discovery works, and is now just `Auto-detect`.
+
+### Notes
+
+- The extension build is otherwise unchanged: no new permissions, and the panel still asks for
+  approval the same way.
+- Verification: typecheck clean, 508/508 tests across 58 files, `check:runtime` passing, and a
+  real dsh 0.2.1-rc.1 handshake held open with zero frames of error.
+
 ## 0.3.5 — 2026-10-12
 
 ### Fixed

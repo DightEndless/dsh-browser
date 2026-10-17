@@ -27,6 +27,7 @@ import type {} from '@deepseek-ai/dsh-session-persistence'
 import type { WebRoute, WebUpgradeRoute } from '@deepseek-ai/dsh-host-webserver'
 import { dshHomePath } from '@deepseek-ai/dsh-home-paths'
 import { BridgeServer } from './server.ts'
+import { startDiscoveryBeacon } from './discovery-beacon.ts'
 import { BrowserContextInjector } from './browser-context.ts'
 import { registerBrowserTools } from './tools.ts'
 import {
@@ -267,6 +268,40 @@ function mountBridge(
     },
   }
   ctx.effect(() => ctx.webServer.register(configRoute), 'bridge-browser: /ext/bridge-config route')
+
+  // Fixed-port beacon so the extension can find the bridge in one request.
+  //
+  // The host web port is system-assigned on every launch, and the extension has
+  // no filesystem access to learn it. Rather than forcing the extension to probe
+  // a port range (slow, and indistinguishable from port scanning), the plugin
+  // binds a small fixed port set of its own and serves the same JSON shape.
+  // A taken port just means the next candidate is used; if all are taken the
+  // extension falls back to its own discovery, so this is never load-bearing.
+  const configDetails = (): Record<string, unknown> => ({
+    ...(extensionRelease ? {
+      extensionPath: extensionRelease.targetDir,
+      extensionStatus: extensionRelease.status,
+      extensionManualPath: extensionRelease.sourceDir,
+      ...(extensionRelease.error ? { extensionError: extensionRelease.error } : {}),
+    } : {}),
+  })
+  ctx.effect(() => {
+    let beacon: { close(): Promise<void> } | undefined
+    let disposed = false
+    void startDiscoveryBeacon({
+      wsUrl: () => `ws://127.0.0.1:${ctx.webServer.port}${BRIDGE_PATH}`,
+      details: configDetails,
+      logger: ctx.logger,
+    }).then((started) => {
+      // The plugin may unload while the listener is still binding.
+      if (disposed) { void started.close(); return }
+      beacon = started
+    })
+    return () => {
+      disposed = true
+      void beacon?.close()
+    }
+  }, 'bridge-browser: discovery beacon')
 
   ctx.effect(() => {
     const disposers = registerBrowserTools(ctx, server, {

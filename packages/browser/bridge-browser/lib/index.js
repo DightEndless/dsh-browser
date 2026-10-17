@@ -5,6 +5,7 @@ import { dshHomePath } from "@deepseek-ai/dsh-home-paths";
 import { WebSocket, WebSocketServer } from "ws";
 import { chmod, lstat, mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
 import path, { dirname, join, resolve } from "node:path";
+import { createServer } from "node:http";
 import { createUserMessage } from "@deepseek-ai/dsh-llm";
 import { defineTool } from "@deepseek-ai/dsh-tools";
 import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
@@ -854,6 +855,119 @@ function payloadMessage(payload) {
 		return "browser action failed";
 	}
 	return "browser action failed";
+}
+//#endregion
+//#region lib/types/discovery-beacon.js
+/**
+* Fixed-port discovery beacon for the browser extension.
+*
+* DSH Desktop binds its web server to a system-assigned port on every launch
+* (`dsh-desktop.port: 0`), and the extension cannot read the filesystem to learn
+* that port. Without a beacon the extension would have to probe a wide port
+* range — behaviour that looks like port scanning and costs seconds on every
+* reconnect after a DSH restart.
+*
+* This module listens on a small, fixed set of loopback ports and answers
+* `GET /ext/bridge-config` with the live WebSocket URL, so the extension reaches
+* the bridge in one request. The same JSON shape is served by the host web
+* server, so the extension needs no special case.
+*
+* Ports are tried in order so a second DSH instance (or an unrelated program)
+* holding the first one does not disable discovery: the listener simply takes
+* the next free port. All candidate ports are compiled into the extension, so it
+* probes this short list rather than a range.
+*
+* @module
+*/
+/**
+* Loopback ports the extension probes for discovery, in order.
+*
+* Deliberately small and in the registered range (1024-49151): 3 candidates mean
+* at most three immediate connection attempts, never a range scan.
+*/
+const DISCOVERY_BEACON_PORTS = [
+	30789,
+	30790,
+	30791
+];
+/** Loopback address the beacon binds; never exposed to the network. */
+const BEACON_HOST = "127.0.0.1";
+/** Path the extension fetches; identical to the host web server's route. */
+const BEACON_PATH = "/ext/bridge-config";
+/** Try one port; resolves the server on success, undefined when taken. */
+async function listenOn(port, options) {
+	const server = createServer((request, response) => {
+		if (request.method !== "GET" || (request.url ?? "").split("?")[0] !== BEACON_PATH) {
+			response.writeHead(404, { "content-type": "text/plain" });
+			response.end("not found");
+			return;
+		}
+		try {
+			const body = JSON.stringify({
+				wsUrl: options.wsUrl(),
+				...options.details?.() ?? {}
+			});
+			response.writeHead(200, {
+				"content-type": "application/json",
+				"cache-control": "no-store"
+			});
+			response.end(body);
+		} catch (error) {
+			response.writeHead(500, { "content-type": "text/plain" });
+			response.end(String(error));
+		}
+	});
+	return await new Promise((resolve) => {
+		const onError = (error) => {
+			server.removeListener("listening", onListening);
+			server.close();
+			if (error.code === "EADDRINUSE" || error.code === "EACCES") {
+				resolve(void 0);
+				return;
+			}
+			options.logger?.warn?.(`browser bridge: discovery beacon on ${port} failed: ${String(error)}`);
+			resolve(void 0);
+		};
+		const onListening = () => {
+			server.removeListener("error", onError);
+			server.on("error", (error) => {
+				options.logger?.warn?.(`browser bridge: discovery beacon error: ${String(error)}`);
+			});
+			resolve(server);
+		};
+		server.once("error", onError);
+		server.once("listening", onListening);
+		server.listen(port, BEACON_HOST);
+	});
+}
+/**
+* Start the discovery beacon on the first free candidate port.
+*
+* Resolves with the bridge absent when every candidate is taken; the extension
+* then falls back to its own discovery, so this never blocks bridge operation.
+*/
+async function startDiscoveryBeacon(options) {
+	for (const port of DISCOVERY_BEACON_PORTS) {
+		const server = await listenOn(port, options);
+		if (server === void 0) continue;
+		options.logger?.info?.(`browser bridge: discovery beacon listening on http://${BEACON_HOST}:${port}${BEACON_PATH}`);
+		let closed = false;
+		return {
+			port,
+			async close() {
+				if (closed) return;
+				closed = true;
+				await new Promise((resolve) => {
+					server.close(() => resolve());
+				});
+			}
+		};
+	}
+	options.logger?.warn?.(`browser bridge: discovery beacon could not bind any of ${DISCOVERY_BEACON_PORTS.join(", ")}; the extension falls back to its own discovery`);
+	return {
+		port: void 0,
+		close: async () => {}
+	};
 }
 //#endregion
 //#region lib/types/browser-context.js
@@ -2042,6 +2156,38 @@ function shouldBridgeOwnQuestion(input) {
 */
 const EMPTY_WIRE_UPLINK = { async *[Symbol.asyncIterator]() {} };
 /**
+* Minimal Peer for in-process Host wireStream.open calls.
+*
+* The 0.2.0-rc.2 line accepted `undefined` in the Peer slot. dsh 0.2.1-rc.1
+* reads the Peer eagerly, so the bridge must supply a real scope:
+*
+* 1. Gateway `methodSignal` joins each stream's signal with `request.peer.signal`
+*    → `undefined` throws `Cannot read properties of undefined (reading 'signal')`.
+* 2. Gateway-owned `$events` calls `requireInteractions(peer, endpoint)`, which
+*    rejects any Peer whose `interactions` is not `'answer'`.
+* 3. `openRemoteEvents` stores `peer.principal` and reads `peer.principal.kind`,
+*    so the Peer must carry an owner Principal.
+*
+* Each failure surfaces as `stream-failed` immediately after `hello.ok`, and the
+* extension then retries forever on WS 1011 — the symptom is a side panel that
+* flickers between `connecting`, `connected`, and `reconnecting`.
+*
+* The signal never aborts: stream lifetime belongs to the caller's own `signal`,
+* not to a Peer this process does not own. Identity is the Host owner, which is
+* what trusted in-process code already runs as.
+*/
+const PROCESS_PEER_LIFETIME = new AbortController();
+/** Peer scope handed to Gateway-owned `$events` streams. */
+const PROCESS_PEER = {
+	id: "dsh-bridge-browser:in-process",
+	principal: { kind: "owner" },
+	interactions: "answer",
+	get signal() {
+		return PROCESS_PEER_LIFETIME.signal;
+	},
+	dispose: async () => {}
+};
+/**
 * Open a Host wire stream against either dsh 0.2 or the legacy three-arg form.
 *
 * - arity 3: composition/unit stubs still use `(endpoint, payload, signal)`.
@@ -2049,11 +2195,14 @@ const EMPTY_WIRE_UPLINK = { async *[Symbol.asyncIterator]() {} };
 * - arity 0: Cordis/service wrappers — must use the five-arg call. Treating
 *   these as three-arg maps AbortSignal onto uplink and leaves signal
 *   undefined (hello.ok → stream-failed → WS 1011).
+*
+* The Peer slot must be a live scope, not `undefined`: dsh 0.2.1-rc.1 dereferences
+* `peer.signal` when joining a stream's cancellation.
 */
 function openWireStream(gateway, endpoint, payload, signal) {
 	const open = gateway.wireStream.open;
 	if (open.length === 3) return open(endpoint, payload, signal);
-	return open(endpoint, payload, EMPTY_WIRE_UPLINK, void 0, signal);
+	return open(endpoint, payload, EMPTY_WIRE_UPLINK, PROCESS_PEER, signal);
 }
 /** Build the dsh 0.2 Host implementation. */
 function createRemoteHostApi(gateway, connection) {
@@ -3121,6 +3270,31 @@ function mountBridge(ctx, resolved, tokenRes, hostApi, extensionRelease) {
 		}
 	};
 	ctx.effect(() => ctx.webServer.register(configRoute), "bridge-browser: /ext/bridge-config route");
+	const configDetails = () => ({ ...extensionRelease ? {
+		extensionPath: extensionRelease.targetDir,
+		extensionStatus: extensionRelease.status,
+		extensionManualPath: extensionRelease.sourceDir,
+		...extensionRelease.error ? { extensionError: extensionRelease.error } : {}
+	} : {} });
+	ctx.effect(() => {
+		let beacon;
+		let disposed = false;
+		startDiscoveryBeacon({
+			wsUrl: () => `ws://127.0.0.1:${ctx.webServer.port}${BRIDGE_PATH}`,
+			details: configDetails,
+			logger: ctx.logger
+		}).then((started) => {
+			if (disposed) {
+				started.close();
+				return;
+			}
+			beacon = started;
+		});
+		return () => {
+			disposed = true;
+			beacon?.close();
+		};
+	}, "bridge-browser: discovery beacon");
 	ctx.effect(() => {
 		const disposers = registerBrowserTools(ctx, server, {
 			toolTimeoutMs: resolved.toolTimeoutMs,

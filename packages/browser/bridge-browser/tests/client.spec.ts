@@ -96,7 +96,7 @@ describe('client.js browser bundle', () => {
     expect(zhKeys).toContain('extensionInstall.failed')
   })
 
-  it('injects settings general item slot upon apply', () => {
+  it('registers its own settings section upon apply', () => {
     const registeredSlots: any[] = []
     const mockCtx = {
       effect: vi.fn(),
@@ -113,12 +113,13 @@ describe('client.js browser bundle', () => {
     run()
     loadedModule.apply(mockCtx)
 
-    expect(mockCtx.slots.inject).toHaveBeenCalledWith('settings.general.item', expect.any(Function))
+    expect(mockCtx.slots.inject).toHaveBeenCalledWith('settings.section', expect.any(Function))
     expect(registeredSlots.length).toBe(1)
     expect(registeredSlots[0].descriptor).toEqual({
-      name: 'settings.general.item',
-      id: 'bridge-browser-address',
-      order: 100,
+      name: 'settings.section',
+      id: 'bridge-browser',
+      order: 40,
+      label: expect.any(Function),
       locale: 'bridge-browser',
     })
     expect(typeof registeredSlots[0].component).toBe('function')

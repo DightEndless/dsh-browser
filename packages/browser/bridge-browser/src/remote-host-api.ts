@@ -57,6 +57,40 @@ const EMPTY_WIRE_UPLINK: AsyncIterable<unknown> = {
 }
 
 /**
+ * Minimal Peer for in-process Host wireStream.open calls.
+ *
+ * The 0.2.0-rc.2 line accepted `undefined` in the Peer slot. dsh 0.2.1-rc.1
+ * reads the Peer eagerly, so the bridge must supply a real scope:
+ *
+ * 1. Gateway `methodSignal` joins each stream's signal with `request.peer.signal`
+ *    → `undefined` throws `Cannot read properties of undefined (reading 'signal')`.
+ * 2. Gateway-owned `$events` calls `requireInteractions(peer, endpoint)`, which
+ *    rejects any Peer whose `interactions` is not `'answer'`.
+ * 3. `openRemoteEvents` stores `peer.principal` and reads `peer.principal.kind`,
+ *    so the Peer must carry an owner Principal.
+ *
+ * Each failure surfaces as `stream-failed` immediately after `hello.ok`, and the
+ * extension then retries forever on WS 1011 — the symptom is a side panel that
+ * flickers between `connecting`, `connected`, and `reconnecting`.
+ *
+ * The signal never aborts: stream lifetime belongs to the caller's own `signal`,
+ * not to a Peer this process does not own. Identity is the Host owner, which is
+ * what trusted in-process code already runs as.
+ */
+const PROCESS_PEER_LIFETIME = new AbortController()
+
+/** Peer scope handed to Gateway-owned `$events` streams. */
+const PROCESS_PEER = {
+  id: 'dsh-bridge-browser:in-process',
+  principal: { kind: 'owner' },
+  interactions: 'answer',
+  get signal(): AbortSignal {
+    return PROCESS_PEER_LIFETIME.signal
+  },
+  dispose: async (): Promise<void> => { /* the process owns this scope's lifetime */ },
+} as const
+
+/**
  * Open a Host wire stream against either dsh 0.2 or the legacy three-arg form.
  *
  * - arity 3: composition/unit stubs still use `(endpoint, payload, signal)`.
@@ -64,13 +98,16 @@ const EMPTY_WIRE_UPLINK: AsyncIterable<unknown> = {
  * - arity 0: Cordis/service wrappers — must use the five-arg call. Treating
  *   these as three-arg maps AbortSignal onto uplink and leaves signal
  *   undefined (hello.ok → stream-failed → WS 1011).
+ *
+ * The Peer slot must be a live scope, not `undefined`: dsh 0.2.1-rc.1 dereferences
+ * `peer.signal` when joining a stream's cancellation.
  */
 function openWireStream(gateway: TypertGatewayLike, endpoint: string, payload: unknown, signal: AbortSignal): Promise<AsyncIterable<unknown>> {
   const open = gateway.wireStream.open
   if (open.length === 3) {
     return open(endpoint, payload, signal)
   }
-  return open(endpoint, payload, EMPTY_WIRE_UPLINK, undefined, signal)
+  return open(endpoint, payload, EMPTY_WIRE_UPLINK, PROCESS_PEER, signal)
 }
 
 /** Structural subset of dsh 0.2's Host Connection service. */
