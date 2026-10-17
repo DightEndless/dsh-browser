@@ -24,29 +24,25 @@ Connect [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) to t
 Browser operation is text-first: pages become structured text with a numbered inventory of interactive elements, and the model addresses those elements by number. `browser_screenshot` is the one tool that returns an image—it saves the capture to a local file and hands the model that path, so the page channel keeps its text shape. dsh 0.2.0 multimodal chat is a separate channel again: the side panel accepts PNG, JPEG, WebP, and GIF attachments when the host advertises image support.
 
 > [!IMPORTANT]
-> The workspace pins dsh 0.2.0-rc.2 as its minimum supported runtime, and the published package accepts the `0.2.1-alpha` line as well — `0.2.1-alpha.1` included, which is the build the plugin marketplace verifies against. Older DSH releases are not supported.
+> Supported dsh runtimes: `0.2.0-rc.2`, the whole `0.2.1-alpha` line, and `0.2.1-rc.1` / `0.2.1-rc.2`. The `0.2.1` line tightened the gateway's `PeerScope` contract, so 0.3.6 is the first release that works there — anything older desynced on `$events` and the panel never connected. Older dsh releases are not supported.
 
 ## Quick install
+
+> [!TIP]
+> **No API key, no account, no third-party service.** Chrome works with zero configuration: install the plugin, restart dsh, load the extension once, and the side panel connects by itself. Everything runs on loopback against the dsh you already have. (Only Firefox needs a local token, because a `moz-extension://` UUID cannot authenticate an add-on — see [Firefox](#firefox).)
 
 Three routes. The integration contains both a dsh bridge plugin and a browser extension, and the extension half is always loaded unpacked in Chrome, which allows no other way — so unless you use the installer, the two halves are installed separately.
 
 **1. Plugin only**, prebuilt, with no build step and no Git:
 
 ```sh
-dsh plugin --profile web add https://github.com/DightEndless/dsh-browser/releases/download/v0.3.5/dightendless-dsh-bridge-browser-0.3.5.tgz
-```
-
-The same package is on npm, and the CLI takes it straight from there:
-
-```sh
 dsh plugin --profile web add @dightendless/dsh-bridge-browser
 ```
 
-(`npm i @dightendless/dsh-bridge-browser` if you manage the profile by hand instead. After installing the plugin, open the panel and follow the instructions to load the extension.)
+(The same bytes are attached to the [latest release](https://github.com/DightEndless/dsh-browser/releases/latest) as a tarball for offline installs, and `npm i @dightendless/dsh-bridge-browser` works if you manage the profile by hand. After installing the plugin, restart dsh; it releases the extension to `~/.dsh/browser-extension` and prints the path.)
 
-**2. Extension only**, prebuilt: download
-[`dsh-browser-extension-0.3.5.zip`](https://github.com/DightEndless/dsh-browser/releases/download/v0.3.5/dsh-browser-extension-0.3.5.zip),
-unzip it, then open `chrome://extensions` (Edge: `edge://extensions`), turn on **Developer mode**, choose **Load unpacked**, and select the folder that came out of the zip.
+**2. Extension only**, prebuilt: take the `extension/` folder from the same release tarball, or let the plugin release it (route 1 does this on first start). Then open
+`chrome://extensions` (Edge: `edge://extensions`), turn on **Developer mode**, choose **Load unpacked**, and select that folder.
 
 Routes 1 and 2 together are the whole product, and neither needs Node, pnpm, or Git.
 
@@ -199,9 +195,14 @@ Local Chrome use requires no configuration; Firefox requires the local bridge to
 
 **Side panel stays "Not connected"**
 
-- Make sure dsh web is running locally (default `http://127.0.0.1:3080`).
-- Verify the bridge is loaded: open `http://127.0.0.1:3080/ext/bridge-config`. It should return JSON such as `{"wsUrl":"ws://127.0.0.1:3080/ext/bridge"}`. If it returns a web page instead of JSON, the running dsh predates the bridge registration — restart dsh and refresh the page; the extension reconnects on its own.
-- The extension probes ports 3080, 3081, 3090, and 14389 automatically. If dsh runs on another port — or you use a remote `--host 0.0.0.0` deployment — set the address (and bridge token) in the panel settings. Firefox always requires the token.
+Chrome needs no address and no token — leave both fields blank and the extension finds the bridge itself. If it still does not connect:
+
+- Make sure dsh is running. The extension asks the plugin directly: the plugin binds a fixed loopback port (`30789`, falling back to `30790` / `30791`) and answers `/ext/bridge-config` there with the live WebSocket URL. Check it with `curl http://127.0.0.1:30789/ext/bridge-config`; it returns JSON such as `{"wsUrl":"ws://127.0.0.1:<port>/ext/bridge"}`.
+- If nothing answers on those ports, the plugin is not loaded. Run `dsh plugin --profile <profile> list` and restart dsh after installing.
+- After upgrading the plugin, reload the extension once: open `chrome://extensions` and click the circular arrow on the card. A dsh restart alone does not reload it.
+- A remote `--host 0.0.0.0` deployment cannot be discovered automatically. Open the panel settings, expand **Advanced**, and paste the bridge address (plus the token) there.
+
+Firefox always requires the token: `moz-extension://` UUIDs cannot authenticate an add-on.
 
 ## Development
 

@@ -24,30 +24,24 @@
 浏览器操作以文本为主：页面会转换为结构化文本和带编号的交互元素清单，模型通过编号定位元素。`browser_screenshot` 是唯一会返回图片的工具——它把截图存成本地文件，只把路径交给模型，因此页面通道依然保持文本形态。dsh 0.2.0 的多模态对话是另一条独立通道：宿主声明图片能力时，侧栏可发送 PNG、JPEG、WebP 和 GIF。
 
 > [!IMPORTANT]
-> 当前工作区固定使用 dsh 0.2.0-rc.2 作为最低支持版本；发布包同时接受 `0.2.1-alpha` 一线（含 `0.2.1-alpha.1`，也就是插件市场用于验证的那个版本）。不再支持更旧的 DSH。
+> 支持的 dsh 运行时：`0.2.0-rc.2`、整条 `0.2.1-alpha` 线，以及 `0.2.1-rc.1` / `0.2.1-rc.2`。`0.2.1` 线收紧了网关的 `PeerScope` 契约，所以 **0.3.6 是第一个能在其上工作的版本**——更旧的版本会在 `$events` 上断开，面板始终连不上。不再支持更旧的 DSH。
 
 ## 快速安装
+
+> [!TIP]
+> **不需要 API Key、不需要注册账号、不接任何第三方服务。** Chrome 零配置：装好插件、重启 dsh、加载一次扩展，侧边栏自己连上。全程只走你本机的回环地址。（只有 Firefox 需要本地 token，因为 `moz-extension://` 的 UUID 无法为扩展鉴权——见 [Firefox](#firefox)。）
 
 有三条路线。本项目同时包含 dsh bridge plugin 和浏览器扩展，而扩展这一半在 Chrome 里只能以「加载已解压」的方式安装——浏览器不提供别的途径。所以除非用安装器，两半是分开装的。
 
 **1. 只装插件**（已预构建，无需构建步骤，也不需要 Git）：
 
 ```sh
-dsh plugin --profile web add https://github.com/DightEndless/dsh-browser/releases/download/v0.3.5/dightendless-dsh-bridge-browser-0.3.5.tgz
-```
-
-同一个包也发布在 npm 上，CLI 可以直接按包名安装：
-
-```sh
 dsh plugin --profile web add @dightendless/dsh-bridge-browser
 ```
 
-（手动管理 profile 的话就是 `npm i @dightendless/dsh-bridge-browser`。装完插件后打开面板，按提示把扩展加载进来。）
+（同样的字节也附在 [最新 release](https://github.com/DightEndless/dsh-browser/releases/latest) 的 tarball 里，可离线安装；手动管理 profile 的话就是 `npm i @dightendless/dsh-bridge-browser`。装完插件后重启 dsh，它会扩展释到 `~/.dsh/browser-extension` 并打印该路径。）
 
-**2. 只装扩展**（已预构建）：下载
-[`dsh-browser-extension-0.3.5.zip`](https://github.com/DightEndless/dsh-browser/releases/download/v0.3.5/dsh-browser-extension-0.3.5.zip)，
-解压后打开 `chrome://extensions`（Edge 是 `edge://extensions`），开启右上角**开发者模式**，点
-**加载已解压的扩展程序**，选中解压出来的那个文件夹。
+**2. 只装扩展**（已预构建）：从同一个 release 的 tarball 里取 `extension/` 文件夹，或者让插件自己释放（路线 1 首次启动就会做）。然后打开 `chrome://extensions`（Edge 是 `edge://extensions`），开启右上角**开发者模式**，点 **加载已解压的扩展程序**，选中那个文件夹。
 
 路线 1 加路线 2 就是完整安装，而且**都不需要 Node、pnpm 或 Git**。
 
@@ -200,9 +194,14 @@ Chrome 本机使用无需配置；Firefox 需要填写上述本地桥 token。�
 
 **侧边栏一直显示「未连接」**
 
-- 确认本机 dsh web 正在运行（默认 `http://127.0.0.1:3080`）。
-- 确认桥接已加载：浏览器打开 `http://127.0.0.1:3080/ext/bridge-config`，应返回类似 `{"wsUrl":"ws://127.0.0.1:3080/ext/bridge"}` 的 JSON。如果返回的是网页而不是 JSON，说明当前运行的 dsh 早于桥接注册——重启 dsh 并刷新页面即可，扩展会自动重连。
-- 扩展会自动探测 3080/3081/3090/14389 端口。若 dsh 运行在其它端口，或使用 `--host 0.0.0.0` 远程部署，请在面板设置中填写地址与桥接 token。Firefox 始终需要 token。
+Chrome 不需要填地址、也不需要填 token——两个框留空，扩展会自己找到桥。若仍连不上：
+
+- 确认 dsh 正在运行。扩展会直接问插件：插件占用固定的回环端口（`30789`，被占则 `30790` / `30791`），在那里用 `/ext/bridge-config` 回应当前真实的 WebSocket 地址。可以用 `curl http://127.0.0.1:30789/ext/bridge-config` 自查，返回类似 `{"wsUrl":"ws://127.0.0.1:<端口>/ext/bridge"}` 的 JSON。
+- 这几个端口都没有响应，说明插件没加载。运行 `dsh plugin --profile <profile> list` 确认，装好后重启 dsh。
+- 升级插件后要重新加载一次扩展：打开 `chrome://extensions`，点卡片上的圆形重载箭头。只重启 dsh 不会重载扩展。
+- 用 `--host 0.0.0.0` 做的远程部署无法自动发现。打开面板设置，展开**高级**，把桥地址（以及 token）填进去。
+
+Firefox 始终需要 token：`moz-extension://` 的 UUID 无法为扩展鉴权。
 
 ## 开发
 
